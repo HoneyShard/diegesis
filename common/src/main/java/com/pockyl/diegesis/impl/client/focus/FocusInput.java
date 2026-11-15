@@ -158,6 +158,41 @@ public final class FocusInput {
         return spreadTargets.size() > 1 && spreadTargets.contains(target);
     }
 
+    /**
+     * While a drag spreads the stack in the hand over several slots, what one of them will hold, as a vanilla screen shows it:
+     * the left button shares the stack evenly, the right one puts one into each. Empty for any other slot, or with no such drag.
+     */
+    public ItemStack spreadPreview(Target target) {
+        ClientStation station = station();
+        ItemStack carried = carriedStack();
+        if (station == null || carried.isEmpty() || !isSpreadTarget(target)) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack there = itemAt(station, target);
+        int already = there.isEmpty() ? 0 : there.getCount();
+        return carried.copyWithCount(Math.min(already + spreadEach(carried), carried.getMaxStackSize()));
+    }
+
+    /** How many stay in the hand once the drag in progress is let go; -1 with no drag over several slots. */
+    public int spreadLeft() {
+        ClientStation station = station();
+        ItemStack carried = carriedStack();
+        if (station == null || carried.isEmpty() || spreadTargets.size() < 2) {
+            return -1;
+        }
+        int left = carried.getCount();
+        for (Target target : spreadTargets) {
+            ItemStack there = itemAt(station, target);
+            int already = there.isEmpty() ? 0 : there.getCount();
+            left -= Math.min(already + spreadEach(carried), carried.getMaxStackSize()) - already;
+        }
+        return Math.max(0, left);
+    }
+
+    private int spreadEach(ItemStack carried) {
+        return spreadButton == 1 ? 1 : carried.getCount() / spreadTargets.size();
+    }
+
     Drawer drawer() {
         return drawer;
     }
@@ -308,7 +343,7 @@ public final class FocusInput {
 
     private static ItemStack carriedStack() {
         LocalPlayer player = Minecraft.getInstance().player;
-        return player == null ? ItemStack.EMPTY : player.inventoryMenu.getCarried();
+        return player == null ? ItemStack.EMPTY : player.containerMenu.getCarried();
     }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -352,6 +387,13 @@ public final class FocusInput {
         }
         if (target != null) {
             clickItem(station, target, button, shift, node);
+            return;
+        }
+        if (station.type().authority() == Authority.MENU && !carriedStack().isEmpty() && inventorySlot == -1
+                && outsideBlock(station, x, y)) {
+            // As outside a vanilla screen: the stack in the hand, or one of it, is thrown.
+            com.pockyl.diegesis.impl.client.menu.MenuSession.get().click(station, null, button,
+                    net.minecraft.world.inventory.ClickType.PICKUP);
             return;
         }
         if (button == 1 && !carriedStack().isEmpty() && station.scene().definition().putAway()) {
@@ -479,6 +521,88 @@ public final class FocusInput {
         }
     }
 
+    /** Whether the cursor points past the station's block, a pixel round it: "outside the screen" of a menu station. */
+    private static boolean outsideBlock(ClientStation station, double x, double y) {
+        StationRay ray = stationRay(station, x, y);
+        float near = Float.NEGATIVE_INFINITY;
+        float far = Float.POSITIVE_INFINITY;
+        for (int axis = 0; axis < 3; axis++) {
+            float origin = ray.origin().get(axis);
+            float direction = ray.direction().get(axis);
+            if (Math.abs(direction) < 1.0e-6F) {
+                if (origin < -1.0F || origin > 17.0F) {
+                    return true;
+                }
+                continue;
+            }
+            float a = (-1.0F - origin) / direction;
+            float b = (17.0F - origin) / direction;
+            near = Math.max(near, Math.min(a, b));
+            far = Math.min(far, Math.max(a, b));
+        }
+        return far < Math.max(near, 0.0F);
+    }
+
+    /**
+     * The keys of a vanilla container screen over a slot of a menu station: 1-9 and the off-hand key swap with the hotbar or
+     * the off hand, the drop key throws one (with Ctrl the stack), the pick key copies the stack in creative mode. True when
+     * the key was such a key over a slot.
+     */
+    boolean menuKey(int keyCode, int scanCode, boolean control) {
+        ClientStation station = station();
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (station == null || player == null || station.type().authority() != Authority.MENU || gesture != null) {
+            return false;
+        }
+        Target target = hoveredInventory >= 0 ? new Target.Inventory(hoveredInventory)
+                : hovered != null ? itemTarget(station, hovered.definition()) : null;
+        if (target == null) {
+            return false;
+        }
+        var options = Minecraft.getInstance().options;
+        var session = com.pockyl.diegesis.impl.client.menu.MenuSession.get();
+        if (carriedStack().isEmpty()) {
+            if (options.keySwapOffhand.matches(keyCode, scanCode)) {
+                session.click(station, target, net.minecraft.world.entity.player.Inventory.SLOT_OFFHAND,
+                        net.minecraft.world.inventory.ClickType.SWAP);
+                return true;
+            }
+            for (int i = 0; i < 9; i++) {
+                if (options.keyHotbarSlots[i].matches(keyCode, scanCode)) {
+                    session.click(station, target, i, net.minecraft.world.inventory.ClickType.SWAP);
+                    return true;
+                }
+            }
+        }
+        if (!itemAt(station, target).isEmpty()) {
+            if (options.keyPickItem.matches(keyCode, scanCode)) {
+                session.click(station, target, 2, net.minecraft.world.inventory.ClickType.CLONE);
+                return true;
+            }
+            if (options.keyDrop.matches(keyCode, scanCode)) {
+                session.click(station, target, control ? 1 : 0, net.minecraft.world.inventory.ClickType.THROW);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The pick button over a slot of a menu station: a copy of the stack in creative mode, as in vanilla screens. */
+    boolean menuPick(int button) {
+        ClientStation station = station();
+        if (station == null || station.type().authority() != Authority.MENU || gesture != null
+                || !Minecraft.getInstance().options.keyPickItem.matchesMouse(button)) {
+            return false;
+        }
+        Target target = hoveredInventory >= 0 ? new Target.Inventory(hoveredInventory)
+                : hovered != null ? itemTarget(station, hovered.definition()) : null;
+        if (target == null || itemAt(station, target).isEmpty()) {
+            return false;
+        }
+        com.pockyl.diegesis.impl.client.menu.MenuSession.get().click(station, target, 2, net.minecraft.world.inventory.ClickType.CLONE);
+        return true;
+    }
+
     void drag(double x, double y, int inventorySlot) {
         mouseMoved(x, y, inventorySlot);
         ClientStation station = station();
@@ -581,6 +705,14 @@ public final class FocusInput {
         if (gesture instanceof NodeGrab grab) {
             grab.scroll(amount);
             return;
+        }
+        if (station != null && gesture == null && station.type().authority() == Authority.MENU) {
+            Target under = hoveredInventory >= 0 ? new Target.Inventory(hoveredInventory)
+                    : hovered != null ? itemTarget(station, hovered.definition()) : null;
+            if (under != null) {
+                com.pockyl.diegesis.impl.client.menu.MenuSession.get().wheel(station, under, amount);
+                return;
+            }
         }
         if (station == null || gesture != null || hoveredInventory != -1) {
             return;
@@ -829,6 +961,11 @@ public final class FocusInput {
             carry.snap(station.scene().inventorySlot(inventory.index()).transformPosition(new Vector3f()));
             carryPlaced = true;
             carrySize = station.scene().inventoryLayout().size();
+        } else if (target instanceof Target.Inventory) {
+            InventoryDrawer drawerOptions = station.scene().definition().inventoryDrawer().orElse(null);
+            if (drawerOptions != null && drawerOptions.carrySize().isPresent()) {
+                carrySize = drawerOptions.carrySize().get();
+            }
         }
     }
 

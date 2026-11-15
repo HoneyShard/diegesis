@@ -34,7 +34,32 @@ public final class ClientRegistry {
                 data.contains("count") ? data.getInt("count") : 12, data.getInt("color"))));
     }
 
+    /** Screens that open over a station without ending it: a recipe viewer's page. */
+    private static final java.util.List<java.util.function.Predicate<net.minecraft.client.gui.screens.Screen>> CHILD_SCREENS =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+
     private ClientRegistry() {
+    }
+
+    public static void registerChildScreen(java.util.function.Predicate<net.minecraft.client.gui.screens.Screen> test) {
+        CHILD_SCREENS.add(test);
+    }
+
+    /** Whether {@code screen} opens over a station without ending it. */
+    public static boolean isChildScreen(net.minecraft.client.gui.screens.Screen screen) {
+        if (screen == null) {
+            return false;
+        }
+        for (var test : CHILD_SCREENS) {
+            try {
+                if (test.test(screen)) {
+                    return true;
+                }
+            } catch (RuntimeException e) {
+                // A mod's test that fails must not keep anyone at a station.
+            }
+        }
+        return false;
     }
 
     public static void registerParticle(ResourceLocation id, ParticleStyle style) {

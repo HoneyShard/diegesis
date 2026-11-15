@@ -116,7 +116,10 @@ public final class ClientStations {
             ClientStation station = iterator.next();
             boolean stillThere = station.type().matches(level.getBlockState(station.pos()));
             boolean near = player.distanceToSqr(SubLevels.center(level, station.pos(), true)) < KEEP_RANGE * KEEP_RANGE;
-            boolean wanted = station.isFocused() || station.isInSession() || station.isIdleVisible() || station.holdsBlock();
+            boolean wanted = station.isFocused() || station.isInSession() || station.isIdleVisible() || station.holdsBlock()
+                    // A menu station waits for its menu as the station the camera flies to: nothing else brings it back.
+                    || station.type().authority() == com.pockyl.diegesis.api.station.Authority.MENU
+                    && FocusController.get().station() == station;
             if (!station.isFocused() && (!stillThere || !near || !wanted)) {
                 station.clearRemote();
                 iterator.remove();

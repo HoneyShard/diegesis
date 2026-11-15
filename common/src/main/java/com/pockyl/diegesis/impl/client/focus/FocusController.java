@@ -92,9 +92,19 @@ public final class FocusController {
         return phase == Phase.EXITING;
     }
 
-    /** Whether the player may interact: the camera arrived and the server (if any) accepted. */
+    /**
+     * Whether the player may interact: the server (if any) accepted, and the camera arrived, or flew in as far as the rig's
+     * {@code interactive_at} lets clicks in.
+     */
     public boolean isInteractive() {
-        return phase == Phase.FOCUSED && confirmed;
+        if (!confirmed) {
+            return false;
+        }
+        if (phase == Phase.FOCUSED) {
+            return true;
+        }
+        float from = rig().interactiveAt();
+        return phase == Phase.ENTERING && flightFrom == null && from < 1.0F && progress >= from;
     }
 
     public ClientStation station() {
@@ -259,6 +269,9 @@ public final class FocusController {
         if (tellServer && station.type().authority() == Authority.SERVER) {
             ClientPlatform.INSTANCE.sendToServer(new Packets.Close());
         }
+        if (station.type().authority() == Authority.MENU) {
+            com.pockyl.diegesis.impl.client.menu.MenuSession.get().leave(station);
+        }
         FocusInput.get().cancel();
         if (confirmed) {
             station.setFocusedInternal(false);
@@ -290,6 +303,8 @@ public final class FocusController {
      * ({@link #frame}); otherwise it is hidden at once, as before there was a slide.
      */
     private void hudLeaves(Minecraft minecraft) {
+        HudSlide.keepHotbar(station != null && station.scene() != null
+                && station.scene().definition().inventoryDrawer().map(drawer -> drawer.keepsHotbar()).orElse(false));
         if (!savedHideGui && sliding()) {
             minecraft.options.hideGui = false;
             HudSlide.out(hud());
@@ -313,6 +328,7 @@ public final class FocusController {
             Minecraft.getInstance().options.hideGui = savedHideGui;
         }
         HudSlide.reset();
+        com.pockyl.diegesis.impl.client.menu.MenuSession.get().reset();
         FocusInput.get().cancel();
         FocusInput.get().look().reset();
         phase = Phase.IDLE;
@@ -371,7 +387,8 @@ public final class FocusController {
             }
         }
         ClearBlocks.keep(station, flightFromStation, dt);
-        if ((phase == Phase.FOCUSED || phase == Phase.ENTERING) && !(minecraft.screen instanceof FocusScreen)) {
+        if ((phase == Phase.FOCUSED || phase == Phase.ENTERING) && !(minecraft.screen instanceof FocusScreen)
+                && !com.pockyl.diegesis.impl.client.ClientRegistry.isChildScreen(minecraft.screen)) {
             // Another screen replaced ours (chat, inventory, death): leave the station.
             exit(true);
         }

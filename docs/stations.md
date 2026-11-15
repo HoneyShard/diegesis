@@ -30,6 +30,7 @@ public static final StationType STILL = Diegesis.station(ResourceLocation.fromNa
 | `when(Predicate<BlockState>)` | all states | Only some states open it (the lower half of a tall block). |
 | `anchor(Anchor)` | every block alone | Multiblocks: which block the station lives at (below). |
 | `authority(Authority)` / `clientOnly()` | `SERVER` | Who owns the state (below). |
+| `menu(MenuBinding)` | none | Work through the block's own vanilla menu (`MENU` authority, below). |
 | `schema(StationSchema)` | empty | Slots, tanks, controls, outputs. |
 | `scene(ResourceLocation)` | the station id | Another scene than `assets/<ns>/diegesis/scenes/<path>.json` of the id. |
 | `logic(StationLogic.Factory)` | none | The rules; one logic object per station in use. |
@@ -52,6 +53,29 @@ At least one block, supplier or tag is required.
   sees what the player does and no items can move (a client-only station cannot have slots or outputs). Use it for
   visual stations, previews and animations: a furnace that shows its fire up close, a toy. Its `StationLogic` runs on
   the client.
+- **`MENU`** (`menu(MenuBinding)`): the block's own vanilla menu. The use goes to the server as vanilla sends it, the
+  menu the server opens is taken without its screen, the station's slot groups and outputs show the menu slots the
+  binding names, and every click at the station is the click the vanilla screen would send (also number keys, the
+  off-hand key, Q, the pick button in creative mode and a click past the block, which throws the stack). Items move, and it
+  works on any server, with or without Diegesis: nothing is sent but vanilla packets. Register such a station from the
+  client entry point; no `StationLogic` runs. Any other menu the server opens for the use (a plugin's screen, a mod's own
+  menu) opens its vanilla screen and the station leaves; a use the server does not answer in time ends it quietly.
+
+  ```java
+  Diegesis.station(id("crafting_table"))
+          .blocks(Blocks.CRAFTING_TABLE)
+          .schema(StationSchema.builder().slots("grid", 9).output("result").build())
+          .menu(MenuBinding.of(MenuType.CRAFTING).output("result", 0).slots("grid", 1, 9).build())
+          .register();
+  ```
+
+  Client code: `StationView.menu()` (`MenuAccess`: the menu itself for its data, clicks, `quickMoveFromInventory` for an
+  automatic shift-click that waits until the menu has been open a moment, `pressButton`), `StationBehavior.onMenuOpened`
+  and `onMenuRefused` (`TIMEOUT`, `OTHER_MENU`, `CLOSED_BY_SERVER`). Menu stations do not go over to neighbours yet.
+
+  At a menu station the wheel moves one item at a time (down: to the other side, up: one more of the same here). A screen
+  registered with `DiegesisClient.registerChildScreen` (a recipe viewer's page) opens over any station without ending it;
+  `DiegesisClient.hoveredStack()` tells a viewer's key handler what is under the cursor.
 
 ## Schema
 

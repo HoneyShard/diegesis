@@ -112,6 +112,41 @@ public final class DiegesisClient {
         return FocusController.get().arrival();
     }
 
+    /**
+     * Screens that may open over a station without ending it, such as a recipe viewer's page opened by a key over an item: the
+     * station, its camera and a menu station's menu wait under it, and the player is back at the station when it returns to the
+     * station's screen. Any other screen ends the work at the station, as before.
+     */
+    public static void registerChildScreen(java.util.function.Predicate<net.minecraft.client.gui.screens.Screen> test) {
+        com.pockyl.diegesis.impl.client.ClientRegistry.registerChildScreen(test);
+    }
+
+    /**
+     * Where a world point is on the screen, in GUI pixels, as the last frame was drawn; empty when it is behind the camera. For laying
+     * other mods' overlays round what a station shows.
+     */
+    public static Optional<org.joml.Vector2f> toScreen(net.minecraft.world.phys.Vec3 world) {
+        return Optional.ofNullable(com.pockyl.diegesis.impl.client.focus.Projector.toScreen(world));
+    }
+
+    /** The class of a station's screen, for mods that register handlers by screen class (a recipe viewer's overlay). */
+    public static Class<? extends net.minecraft.client.gui.screens.Screen> stationScreenClass() {
+        return com.pockyl.diegesis.impl.client.focus.FocusScreen.class;
+    }
+
+    /** Whether {@code screen} is the screen of a station being worked at: a parent a child screen returns to. */
+    public static boolean isStationScreen(net.minecraft.client.gui.screens.Screen screen) {
+        return screen instanceof com.pockyl.diegesis.impl.client.focus.FocusScreen;
+    }
+
+    /**
+     * The stack under the cursor at the station the local player works at: in an inventory slot, a station slot or an output; empty
+     * elsewhere. For recipe viewers' keys over an item.
+     */
+    public static net.minecraft.world.item.ItemStack hoveredStack() {
+        return com.pockyl.diegesis.impl.client.focus.FocusScreen.hoveredStack();
+    }
+
     /** The station the local player works at. */
     public static Optional<StationView> focusedStation() {
         return Optional.ofNullable(FocusController.get().station());

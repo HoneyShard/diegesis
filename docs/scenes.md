@@ -53,6 +53,7 @@ scene for completion and checks in VS Code, IntelliJ and other editors.
 | `inventory` | none | A second shot, `{"position", "target", "fov"}`, the camera glides to while the scene's inventory is shown (Tab with `"show": "toggle"`, or an item on the cursor) and back when it hides. Frame the inventory together with the slots it fills, so the laid-out inventory never has to cover the controls. |
 | `glances` | `[]` | Other places the player's look can go to, see below. |
 | `neighbors` | on | Going over to a station standing next to this one, see below. |
+| `interactive_at` | `1` | The share of the flight in, 0..1, from which clicks already count: `1` waits until the camera has arrived. A station used all the time can take clicks during the last part of the flight (`0.6`). |
 | `keep_width` | `1.7778` | The narrowest window shape (width / height) that sees the whole width of the shot, 16:9 by default. A narrower window (4:3, a game snapped to half a screen) gets a wider vertical field of view instead of losing the sides. Only with the rig's own `fov`; `0` keeps the vertical field of view in any window. |
 
 Frame the shot with the debug view on (F3+B): it marks the camera target. A camera much closer than ~16 pixels to the
@@ -254,6 +255,7 @@ gathers, dragging over several slots spreads.
 | `item_size` | `size` | Size of the shown item when it differs. |
 | `counts` | `"always"` | When the stack's count is drawn: `always`, `hover` (slots close together stay readable), `never`. |
 | `highlight` | `true` | The square over the slot under the cursor. Off for things that are no slots to the eye, like food in a pot; the hover outline stays. |
+| `count_facing` | `"up"` | `up`: the count lies on the slot, read from above; `front`: it stands at the item's foot facing the block's front, for an item standing in a hollow the camera looks into (a furnace's mouth). |
 
 A slot node needs no visual: it is an invisible pad on the surface. Put it where the block's texture shows a cell.
 
@@ -422,6 +424,8 @@ dragged straight out of it and let go over a slot in the scene.
 | `slot_color` | `"#66000000"` | Colour of a slot in the `minimal` style. |
 | `always_open` | `false` | It slides out when the station opens and stays out, without an icon; Escape leaves the station at once. For stations worked from the inventory all the time. |
 | `compact` | `false` | Only the stacks the station can use, in rows of up to nine, the drawer no bigger than they are; the `minimal` look. Client code picks them with `StationView.setInventoryFilter`, without one every stack that is not empty shows. A stack on the cursor gets one empty slot to go into. It changes shape only while the cursor is away from it. |
+| `carry_size` | none | Size (pixels) of a stack taken from the drawer while it is carried over the scene, as big as the station's own items look. Without it the stack keeps the size of the last one carried. |
+| `layout` | `"rows"` | `rows`: the drawer as above. `hotbar`: the hotbar stays where the HUD draws it and takes clicks (the HUD's own is gone at once and back at once), the off hand beside it at a menu station; over it a square for each other stack the station can use (`StationView.setInventoryFilter`), in the order they had when the station opened, with one empty square always. `side`, `align`, `icon`, `style` and `compact` do not apply. |
 
 Client code: `StationView.setInventoryOpen(boolean)`, `isInventoryOpen()`, `setInventoryFilter(Predicate<ItemStack>)`, `SceneEvent.InventoryDrawer`.
 

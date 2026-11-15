@@ -32,15 +32,17 @@ import java.util.Optional;
  * @param keepWidth  the narrowest window shape (width / height) that sees the whole width of the shot: a narrower window, such
  *                   as 4:3 or a game snapped to half a screen, gets a wider vertical field of view instead of losing the sides.
  *                   Only with a {@code fov} of the rig's own; 0 keeps the vertical field of view in any window
+ * @param interactiveAt the share of the flight in, 0..1, from which the player may already click: 1 (the default) waits until the
+ *                   camera has arrived. A station used all the time takes clicks during the last part of the flight
  */
 public record CameraRig(Vector3fc position, Vector3fc target, float fov, float transition, Optional<CameraShot> inventory,
-        List<CameraGlance> glances, Map<String, CameraShot> seats, CameraNeighbors neighbors, float keepWidth) {
+        List<CameraGlance> glances, Map<String, CameraShot> seats, CameraNeighbors neighbors, float keepWidth, float interactiveAt) {
     /** 16:9, the shape most screens have and stations are framed for. */
     public static final float WIDE = 16.0F / 9.0F;
 
     /** Looks down at the top of the block from the front, like a person standing at a table. */
     public static final CameraRig DEFAULT = new CameraRig(new Vector3f(8.0F, 36.0F, -12.0F), new Vector3f(8.0F, 16.0F, 7.0F), 0.0F, 0.4F,
-            Optional.empty(), List.of(), Map.of(), CameraNeighbors.DEFAULT, WIDE);
+            Optional.empty(), List.of(), Map.of(), CameraNeighbors.DEFAULT, WIDE, 1.0F);
 
     public static final Codec<CameraRig> CODEC = StrictCodecs.record(instance -> instance.group(
             StrictCodecs.optional(StrictCodecs.VEC3, "position", new Vector3f(DEFAULT.position)).forGetter(r -> new Vector3f(r.position)),
@@ -51,7 +53,8 @@ public record CameraRig(Vector3fc position, Vector3fc target, float fov, float t
             StrictCodecs.optional(CameraGlance.CODEC.listOf(), "glances", List.of()).forGetter(CameraRig::glances),
             StrictCodecs.optional(Codec.unboundedMap(Codec.STRING, CameraShot.CODEC), "seats", Map.of()).forGetter(CameraRig::seats),
             StrictCodecs.optional(CameraNeighbors.CODEC, "neighbors", CameraNeighbors.DEFAULT).forGetter(CameraRig::neighbors),
-            StrictCodecs.optional(Codec.floatRange(0.0F, 10.0F), "keep_width", WIDE).forGetter(CameraRig::keepWidth)
+            StrictCodecs.optional(Codec.floatRange(0.0F, 10.0F), "keep_width", WIDE).forGetter(CameraRig::keepWidth),
+            StrictCodecs.optional(Codec.floatRange(0.0F, 1.0F), "interactive_at", 1.0F).forGetter(CameraRig::interactiveAt)
     ).apply(instance, CameraRig::new));
 
     public CameraRig {
@@ -59,6 +62,12 @@ public record CameraRig(Vector3fc position, Vector3fc target, float fov, float t
         target = new Vector3f(target);
         glances = List.copyOf(glances);
         seats = Map.copyOf(seats);
+    }
+
+    /** A rig that takes clicks once the camera has arrived. */
+    public CameraRig(Vector3fc position, Vector3fc target, float fov, float transition, Optional<CameraShot> inventory,
+            List<CameraGlance> glances, Map<String, CameraShot> seats, CameraNeighbors neighbors, float keepWidth) {
+        this(position, target, fov, transition, inventory, glances, seats, neighbors, keepWidth, 1.0F);
     }
 
     /** A rig that keeps the width of a 16:9 shot in narrower windows. */
@@ -76,36 +85,41 @@ public record CameraRig(Vector3fc position, Vector3fc target, float fov, float t
     /** A camera at {@code position} looking at {@code target}, with the player's field of view. */
     public static CameraRig of(Vector3fc position, Vector3fc target) {
         return new CameraRig(position, target, 0.0F, DEFAULT.transition, Optional.empty(), List.of(), Map.of(), CameraNeighbors.DEFAULT,
-                WIDE);
+                WIDE, 1.0F);
     }
 
     /** The same rig gliding to {@code shot} while the inventory is shown. */
     public CameraRig withInventoryShot(CameraShot shot) {
-        return new CameraRig(position, target, fov, transition, Optional.of(shot), glances, seats, neighbors, keepWidth);
+        return new CameraRig(position, target, fov, transition, Optional.of(shot), glances, seats, neighbors, keepWidth, interactiveAt);
     }
 
     /** The same rig with one more place to look at. */
     public CameraRig withGlance(CameraGlance glance) {
         List<CameraGlance> all = new ArrayList<>(glances);
         all.add(glance);
-        return new CameraRig(position, target, fov, transition, inventory, all, seats, neighbors, keepWidth);
+        return new CameraRig(position, target, fov, transition, inventory, all, seats, neighbors, keepWidth, interactiveAt);
     }
 
     /** The same rig with the view from one more seat. */
     public CameraRig withSeat(String seat, CameraShot shot) {
         Map<String, CameraShot> all = new java.util.HashMap<>(seats);
         all.put(seat, shot);
-        return new CameraRig(position, target, fov, transition, inventory, glances, all, neighbors, keepWidth);
+        return new CameraRig(position, target, fov, transition, inventory, glances, all, neighbors, keepWidth, interactiveAt);
     }
 
     /** The same rig with other rules for going over to neighbouring stations ({@link CameraNeighbors#NONE}: never). */
     public CameraRig withNeighbors(CameraNeighbors value) {
-        return new CameraRig(position, target, fov, transition, inventory, glances, seats, value, keepWidth);
+        return new CameraRig(position, target, fov, transition, inventory, glances, seats, value, keepWidth, interactiveAt);
     }
 
     /** The same rig keeping the width of a shot of this shape (width / height) in narrower windows; 0: never. */
     public CameraRig withKeepWidth(float value) {
-        return new CameraRig(position, target, fov, transition, inventory, glances, seats, neighbors, value);
+        return new CameraRig(position, target, fov, transition, inventory, glances, seats, neighbors, value, interactiveAt);
+    }
+
+    /** The same rig taking clicks from this share of the flight in, 0..1. */
+    public CameraRig withInteractiveAt(float value) {
+        return new CameraRig(position, target, fov, transition, inventory, glances, seats, neighbors, keepWidth, value);
     }
 
     /** The glance with this id. */

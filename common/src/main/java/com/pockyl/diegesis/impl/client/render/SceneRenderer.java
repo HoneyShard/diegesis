@@ -376,11 +376,16 @@ public final class SceneRenderer {
                     renderHighlight(poseStack, buffers, slot.size() + 0.2F, node.isHovered() ? 1.0F : 0.66F);
                 }
                 ItemStack stack = station.state().getItem(slot.slot());
+                ItemStack spread = local ? input.spreadPreview(new Target.Station(slot.slot())) : ItemStack.EMPTY;
+                if (!spread.isEmpty()) {
+                    // What the drag in progress will leave here, as a vanilla screen shows it.
+                    stack = spread;
+                }
                 renderSlotItem(stack, slot.display(), slot.shownItemSize(), slot.slot().index(), station.age(), poseStack, buffers, light,
                         level);
                 boolean counted = slot.counts() == SlotBinding.Counts.ALWAYS || slot.counts() == SlotBinding.Counts.HOVER && local && node.isHovered();
                 if (slot.display() != SlotBinding.ItemDisplay.HIDDEN && counted) {
-                    renderCount(poseStack, buffers, stack, slot.size());
+                    renderCount(poseStack, buffers, stack, slot.size(), slot.countFacing() == SlotBinding.CountFacing.FRONT);
                 }
             });
             definition.output().ifPresent(output -> {
@@ -410,7 +415,13 @@ public final class SceneRenderer {
             poseStack.pushPose();
             Vector3fc at = carried.stationPos();
             poseStack.translate(at.x(), at.y() + 0.4F, at.z());
-            renderCount(poseStack, buffers, carried.stack(), carried.size() * 1.1F);
+            int left = input.spreadLeft();
+            if (left >= 0) {
+                // A drag over several slots: what stays in the hand once it is let go.
+                renderCount(poseStack, buffers, String.valueOf(left), carried.size() * 1.1F);
+            } else {
+                renderCount(poseStack, buffers, carried.stack(), carried.size() * 1.1F);
+            }
             poseStack.popPose();
         }
         for (ClientStation.RemoteHolding holding : station.remoteHoldings()) {
@@ -732,16 +743,38 @@ public final class SceneRenderer {
      * a vanilla slot. Nothing for single items.
      */
     private static void renderCount(PoseStack poseStack, MultiBufferSource buffers, ItemStack stack, float slotSize) {
-        if (!ui.showCounts() || stack.isEmpty() || stack.getCount() <= 1) {
+        renderCount(poseStack, buffers, stack, slotSize, false);
+    }
+
+    private static void renderCount(PoseStack poseStack, MultiBufferSource buffers, ItemStack stack, float slotSize, boolean standing) {
+        if (stack.isEmpty() || stack.getCount() <= 1) {
+            return;
+        }
+        renderCount(poseStack, buffers, String.valueOf(stack.getCount()), slotSize, standing);
+    }
+
+    private static void renderCount(PoseStack poseStack, MultiBufferSource buffers, String text, float slotSize) {
+        renderCount(poseStack, buffers, text, slotSize, false);
+    }
+
+    /** A count at the slot's near right corner: lying on the slot, or {@code standing} at the item's foot, facing the front. */
+    private static void renderCount(PoseStack poseStack, MultiBufferSource buffers, String text, float slotSize, boolean standing) {
+        if (!ui.showCounts()) {
             return;
         }
         Font font = Minecraft.getInstance().font;
-        String text = String.valueOf(stack.getCount());
         float scale = slotSize * 0.42F / font.lineHeight;
         poseStack.pushPose();
-        // The player's right is -x and the near side -z: the font's x runs to -x, its y (down the page) to -z.
-        poseStack.translate(-slotSize / 2.0F, 0.12F, -slotSize / 2.0F);
-        Matrix4f flat = new Matrix4f(-scale, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, -scale, 0.0F, 0.0F, scale, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F);
+        Matrix4f flat;
+        if (standing) {
+            // The font's x runs to -x (the player's right), its y (down the page) down, its z towards the front.
+            poseStack.translate(-slotSize / 2.0F, 0.12F, -0.35F);
+            flat = new Matrix4f(-scale, 0.0F, 0.0F, 0.0F, 0.0F, -scale, 0.0F, 0.0F, 0.0F, 0.0F, -scale, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F);
+        } else {
+            // The player's right is -x and the near side -z: the font's x runs to -x, its y (down the page) to -z.
+            poseStack.translate(-slotSize / 2.0F, 0.12F, -slotSize / 2.0F);
+            flat = new Matrix4f(-scale, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, -scale, 0.0F, 0.0F, scale, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F);
+        }
         Matrix4f matrix = new Matrix4f(poseStack.last().pose()).mul(flat);
         float x = -font.width(text) + 0.5F;
         float y = -font.lineHeight + 1.5F;

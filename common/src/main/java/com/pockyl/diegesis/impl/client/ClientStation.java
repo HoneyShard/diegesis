@@ -384,10 +384,25 @@ public final class ClientStation implements StationView, StationContext {
     @Override
     public void putAwayCarried() {
         Player player = Minecraft.getInstance().player;
-        if (focused && player != null && !player.inventoryMenu.getCarried().isEmpty()
+        if (focused && player != null && !player.containerMenu.getCarried().isEmpty()
                 && perform(new StationAction.Click(new StationAction.Target.Inventory(0), 1, StationAction.ClickKind.PUT_AWAY))) {
             com.pockyl.diegesis.impl.client.focus.UiSounds.putDown(center());
         }
+    }
+
+    @Override
+    public com.pockyl.diegesis.api.client.MenuAccess menu() {
+        return com.pockyl.diegesis.impl.client.menu.MenuSession.get().accessFor(this);
+    }
+
+    /** The server opened this menu station's menu for the local player. */
+    public void menuOpened() {
+        fire(() -> behavior.onMenuOpened(this));
+    }
+
+    /** This menu station ended without the local player leaving it. */
+    public void menuRefused(com.pockyl.diegesis.api.client.MenuRefusal why) {
+        fire(() -> behavior.onMenuRefused(this, why));
     }
 
     /** Whether the station draws the stack on the cursor itself, while the local player works here. */
@@ -568,6 +583,10 @@ public final class ClientStation implements StationView, StationContext {
         if (type.authority() == Authority.CLIENT) {
             return !ActionHandler.movesItems(action) && ActionHandler.apply(this, logic, player, action);
         }
+        if (type.authority() == Authority.MENU) {
+            // The vanilla menu's own clicks: predicted by the menu, sent as the vanilla screen sends them.
+            return com.pockyl.diegesis.impl.client.menu.MenuSession.get().perform(this, action);
+        }
         boolean done = true;
         if (action instanceof StationAction.Click click && click.target() instanceof StationAction.Target.Output output) {
             // Outputs need the server's logic: only guess that something is there to take.
@@ -575,7 +594,7 @@ public final class ClientStation implements StationView, StationContext {
         } else if (action instanceof StationAction.Click click && click.kind() == StationAction.ClickKind.PUT_AWAY) {
             // Never guessed: the slot it goes back to is remembered by the server. A guess from the client's own memory put a knife
             // into a slot the server never filled, and the server, seeing no change there, never took that phantom back.
-            done = !player.inventoryMenu.getCarried().isEmpty();
+            done = !player.containerMenu.getCarried().isEmpty();
         } else if (!(action instanceof StationAction.Custom) && !(action instanceof StationAction.Press)) {
             // Show the result at once; the server's answer confirms or corrects it.
             done = ActionHandler.apply(this, StationLogic.NONE, player, action);

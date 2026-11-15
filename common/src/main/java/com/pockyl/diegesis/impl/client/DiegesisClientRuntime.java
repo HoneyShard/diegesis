@@ -39,6 +39,7 @@ public final class DiegesisClientRuntime {
     /** End of every client tick. */
     public static void tick() {
         ClientStations.get().tick();
+        com.pockyl.diegesis.impl.client.menu.MenuSession.get().tick();
     }
 
     /**
@@ -76,12 +77,17 @@ public final class DiegesisClientRuntime {
             return null;
         }
         boolean server = type.authority() == Authority.SERVER;
+        boolean menu = type.authority() == Authority.MENU;
         ClientStation station = prepare(player, type, pos, state);
         if (server) {
             ClientPlatform.INSTANCE.sendToServer(new Packets.Open(pos));
         }
-        FocusController.get().begin(station, server);
-        return InteractionResult.SUCCESS;
+        if (menu) {
+            // The use goes to the server as vanilla sends it; the menu it opens is taken without its screen.
+            com.pockyl.diegesis.impl.client.menu.MenuSession.get().arm(station);
+        }
+        FocusController.get().begin(station, server || menu);
+        return menu ? null : InteractionResult.SUCCESS;
     }
 
     /**
@@ -94,6 +100,10 @@ public final class DiegesisClientRuntime {
         }
         if (SubLevels.distanceSqr(player.level(), pos, player.getEyePosition()) > type.reach() * type.reach()) {
             return false;
+        }
+        if (type.authority() == Authority.MENU) {
+            // Vanilla's rule: sneaking with anything in a hand uses the item, the block's menu never opens.
+            return !(player.isSecondaryUseActive() && (!player.getMainHandItem().isEmpty() || !player.getOffhandItem().isEmpty()));
         }
         return type.authority() != Authority.SERVER || ClientPlatform.INSTANCE.serverHasChannel() && ClientStations.get().serverHas(type);
     }
@@ -138,7 +148,8 @@ public final class DiegesisClientRuntime {
         }
         BlockState state = player.level().getBlockState(pos);
         StationType type = StationRegistry.find(state).orElse(null);
-        if (type == null || !type.anchor().resolve(player.level(), pos, state).equals(pos) || !mayOpen(player, type, pos, state)) {
+        if (type == null || !type.anchor().resolve(player.level(), pos, state).equals(pos) || !mayOpen(player, type, pos, state)
+                || !joinsNeighbors(focus.station().type(), type)) {
             return false;
         }
         boolean server = type.authority() == Authority.SERVER;
@@ -152,6 +163,11 @@ public final class DiegesisClientRuntime {
         }
         focus.goOver(station, server, seconds);
         return true;
+    }
+
+    /** Whether the player may go over between stations of these types: not to or from a menu station, which needs a use of its own. */
+    public static boolean joinsNeighbors(StationType from, StationType to) {
+        return from.authority() != Authority.MENU && to.authority() != Authority.MENU;
     }
 
     /** Whether the camera is taken over this frame; the camera hook asks first. */

@@ -173,7 +173,8 @@ final class Neighbors {
                     BlockPos pos = at.immutable();
                     SceneDefinition theirs = SceneLibrary.INSTANCE.scene(type.scene());
                     if (theirs == null || !rules(theirs).enabled() || !type.anchor().resolve(level, pos, state).equals(pos)
-                            || pos.equals(station.pos()) || !DiegesisClientRuntime.mayOpen(player, type, pos, state)) {
+                            || pos.equals(station.pos()) || !DiegesisClientRuntime.mayOpen(player, type, pos, state)
+                            || !DiegesisClientRuntime.joinsNeighbors(station.type(), type)) {
                         continue;
                     }
                     Vec3 away = pos.getCenter().subtract(here);

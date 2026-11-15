@@ -108,6 +108,8 @@ obj("camera", "CameraRig", "The camera rig used while a player works at the stat
     "keep_width": field(num(0, 10), "The narrowest window shape (width / height) that sees the whole width of the shot: a"
                                     " narrower window gets a wider vertical field of view instead of losing the sides. Only"
                                     " with the rig's own fov; 0 keeps the vertical field of view.", 1.7778),
+    "interactive_at": field(num(0, 1), "The share of the flight in from which clicks already count; 1 waits until the camera"
+                                       " has arrived.", 1),
 })
 
 obj("gains", "GainOptions", "What the player gets at the station, seen going into the inventory; every field is optional.", {
@@ -320,6 +322,8 @@ obj("slot", "SlotBinding", "A place for an item of a station slot; clicked like 
     "counts": field({"type": "string", "enum": ["always", "hover", "never"]},
                     "When the stack's count is drawn; hover keeps slots close together readable.", "always"),
     "highlight": field(BOOL, "The square over the slot under the cursor; off for things that are no slots to the eye.", True),
+    "count_facing": field({"type": "string", "enum": ["up", "front"]},
+                          "up: the count lies on the slot; front: it stands at the item's foot facing the front.", "up"),
 }, required=["slot"])
 
 obj("output", "OutputBinding", "Shows a result the station logic computes; clicking takes it.", {
@@ -417,6 +421,11 @@ obj("inventory_drawer", "InventoryDrawer",
                                    " the station at once.", False),
         "compact": field(BOOL, "Only the stacks the station can use (StationView.setInventoryFilter), in rows of up to"
                                " nine, the drawer no bigger than they are.", False),
+        "layout": field({"type": "string", "enum": ["rows", "hotbar"]}, "rows: the drawer at its side. hotbar: the hotbar stays where the HUD has it and"
+                                                " takes clicks; over it the other stacks the station can use, in a fixed order, with"
+                                                " one empty slot always.", "rows"),
+        "carry_size": field(num(1, 64), "Size (pixels) of a stack taken from the drawer while it is carried over the scene;"
+                                        " without it the stack keeps the size of the last one carried."),
     })
 
 obj("pouring", "PourOptions", "How pouring looks; every field is optional.", {

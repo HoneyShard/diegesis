@@ -14,6 +14,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in use, so its scene can lift a tower apart.
 - `NodeView.setOutlineSeenOnly(true)`: the hover outline goes round the part of the node the player sees, not its whole
   shape through what stands in front of it (one basket of a stack). Under a shader pack the whole shape stays outlined.
+- Menu stations (`StationType.Builder.menu(MenuBinding)`, `Authority.MENU`): a station that works through the block's own
+  vanilla menu, opened on the server by the block's normal use and never shown. Its slots show the menu's slots and every
+  click is the one the vanilla screen sends, so it moves items on any server, with or without Diegesis there.
+  `StationView.menu()` (`MenuAccess`), `StationBehavior.onMenuOpened` and `onMenuRefused`.
+- At a menu station the keys of a vanilla container screen work over a slot: 1-9 and the off-hand key swap, Q throws one
+  (Ctrl+Q the stack), the pick button copies a stack in creative mode, and a click past the block throws the stack in the
+  hand.
+- `DiegesisClient.toScreen(world)` and `stationScreenClass()`, for laying recipe viewers' overlays round a station.
+- A drag that spreads the stack in the hand over several slots shows, as a vanilla screen does, what each slot will hold
+  and how many stay in the hand.
+- `DiegesisClient.registerChildScreen`: a screen such as a recipe viewer's page may open over a station without ending it;
+  the player is back at the station when it returns. `DiegesisClient.hoveredStack()` (the item under the cursor at a station)
+  and `isStationScreen(screen)` for recipe viewers' keys.
+- At a menu station the mouse wheel moves one item at a time, as Mouse Tweaks does: down over a stack sends one to the other
+  side (inventory and station), up brings one more of the same into it.
+- `MenuAccess.placeRecipe(recipe, all)`: lays a recipe into a menu station the way the vanilla recipe book does.
+- Drawer option `layout: hotbar`: the hotbar stays where the HUD has it and takes clicks, the off hand beside it at a
+  menu station, and over it a square for each other stack the station can use, in the order they had when the station
+  opened, with one empty square always: nothing moves while the player works.
+- Drawer option `carry_size`: a stack taken from the inventory drawer is carried over the scene at that size, as big as the
+  station's own items, instead of the size of the last stack carried.
+- Slot option `count_facing: front`: the count stands at the item's foot facing the block's front, readable when the camera
+  looks into a hollow of a wall rather than down onto a table.
+- Camera option `interactive_at`: clicks count from that share of the flight in (default 1: once the camera has arrived).
 
 ### Fixed
 - Items in a scene keep their depth when tipped: a bucket being poured, or anything leaning, no longer shows dark lines
