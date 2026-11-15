@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The shadow of a carried item is even: it no longer shows darker stripes and bands where the item's front and back overlapped.
 - Where a graphics driver refuses the targets smooth painters are drawn into, they are still drawn over the finished frame,
   only without smoothing; before, they went back into the scene, where a block beside the station could cover them.
+- A station whose open check fails no longer crashes the game when its block is used: the block keeps its own use and
+  the error is logged once.
 
 ## [1.0.0-beta.9+1.21.1] - 2026-11-14
 ### Added

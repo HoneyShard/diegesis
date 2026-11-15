@@ -4,12 +4,14 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
+import com.pockyl.diegesis.DiegesisMod;
 import com.pockyl.diegesis.api.station.Authority;
 import com.pockyl.diegesis.api.station.StationType;
 import com.pockyl.diegesis.impl.StationRegistry;
@@ -19,8 +21,14 @@ import com.pockyl.diegesis.impl.network.DiegesisNetwork;
 import com.pockyl.diegesis.impl.network.Packets;
 import com.pockyl.diegesis.platform.ClientPlatform;
 
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
 /** The client half of the library: wiring called by the loaders, and the hook that turns a block use into a station. */
 public final class DiegesisClientRuntime {
+    /** Station types whose open condition threw, each logged once. */
+    private static final Set<ResourceLocation> FAILED_CONDITIONS = ConcurrentHashMap.newKeySet();
+
     private DiegesisClientRuntime() {
     }
 
@@ -81,13 +89,28 @@ public final class DiegesisClientRuntime {
      * and a server that has the library (else the block keeps its vanilla behaviour).
      */
     public static boolean mayOpen(LocalPlayer player, StationType type, BlockPos pos, BlockState state) {
-        if (player.isSpectator() || !type.openCondition().test(player, pos, state)) {
+        if (player.isSpectator() || !opens(player, type, pos, state)) {
             return false;
         }
         if (SubLevels.distanceSqr(player.level(), pos, player.getEyePosition()) > type.reach() * type.reach()) {
             return false;
         }
         return type.authority() != Authority.SERVER || ClientPlatform.INSTANCE.serverHasChannel() && ClientStations.get().serverHas(type);
+    }
+
+    /**
+     * The station's own open condition. It runs on the use of a block, which the game does not guard, and reads other mods' blocks:
+     * one that throws keeps the block's own use instead of crashing the game.
+     */
+    private static boolean opens(LocalPlayer player, StationType type, BlockPos pos, BlockState state) {
+        try {
+            return type.openCondition().test(player, pos, state);
+        } catch (RuntimeException e) {
+            if (FAILED_CONDITIONS.add(type.id())) {
+                DiegesisMod.LOGGER.error("Open condition of station {} failed at {}", type.id(), pos, e);
+            }
+            return false;
+        }
     }
 
     /** The client's station at {@code pos}, facing as it opens for the player, in the seat they would likely get. */
