@@ -86,6 +86,10 @@ public final class SceneRenderer {
     private static final RenderType OVERLAY = RenderType.entityTranslucentCull(TextureAtlas.LOCATION_BLOCKS);
     /** Everything see-through of the scene goes here, in a buffer of its own: it stays one sorted batch. */
     private static final RenderType CLEAR = DiegesisRenderTypes.clearBlockSheet();
+    /** Opaque items of the scene, drawn after the opaque parts and before CLEAR, with depth: see {@link #solidItems}. */
+    private static final RenderType ITEMS = DiegesisRenderTypes.itemSheet();
+    /** The scene's own buffer source this frame (the see-through sheet drawn as CLEAR). */
+    private static MultiBufferSource sceneSource;
     private static MultiBufferSource.BufferSource clearBuffers;
     /**
      * Everything else of the scene. Not the game's buffer source: see-through things write no depth, so the opaque ones must
@@ -171,7 +175,7 @@ public final class SceneRenderer {
             clearBuffers = MultiBufferSource.immediate(new ByteBufferBuilder(1 << 16));
             SequencedMap<RenderType, ByteBufferBuilder> kept = new LinkedHashMap<>();
             // The see-through item sheet is never drawn into here (CLEAR takes it), only kept: see KeptTypes.
-            for (RenderType type : List.of(RenderType.cutout(), Sheets.cutoutBlockSheet(), OVERLAY, SceneParticles.TYPE,
+            for (RenderType type : List.of(RenderType.cutout(), Sheets.cutoutBlockSheet(), OVERLAY, ITEMS, SceneParticles.TYPE,
                     Sheets.translucentCullBlockSheet())) {
                 kept.put(type, new ByteBufferBuilder(1 << 16));
             }
@@ -185,6 +189,7 @@ public final class SceneRenderer {
             KeptTypes.keep(sceneBuffers, translucent);
             return clearBuffers.getBuffer(CLEAR);
         };
+        sceneSource = scene;
         for (ClientStation station : stations) {
             station.frame(dt);
             if (!isDrawn(station, cameraPos)) {
@@ -207,6 +212,7 @@ public final class SceneRenderer {
         sceneBuffers.endBatch(RenderType.cutout());
         sceneBuffers.endBatch(Sheets.cutoutBlockSheet());
         sceneBuffers.endBatch(OVERLAY);
+        sceneBuffers.endBatch(ITEMS);
         clearBuffers.endBatch();
         sceneBuffers.endBatch();
         flushCounts(sceneBuffers);
@@ -500,7 +506,8 @@ public final class SceneRenderer {
             // The item renderer takes no tint: a tinted item (one offered see-through) is drawn through tinting buffers.
             poseStack.translate(8.0F - anchor.x(), 8.0F - anchor.y(), 8.0F - anchor.z());
             poseStack.scale(16.0F, 16.0F, 16.0F);
-            MultiBufferSource drawn = tint == Visual.WHITE ? buffers : com.pockyl.diegesis.api.client.DiegesisClient.tinted(buffers, tint);
+            MultiBufferSource drawn = tint == Visual.WHITE ? solidItems(buffers)
+                    : com.pockyl.diegesis.api.client.DiegesisClient.tinted((tint >>> 24) == 0xFF ? solidItems(buffers) : buffers, tint);
             minecraft.getItemRenderer().renderStatic(new ItemStack(visual.item().get()), ItemDisplayContext.FIXED, packedLight,
                     OverlayTexture.NO_OVERLAY, poseStack, drawn, level, 0);
             poseStack.popPose();
@@ -789,8 +796,8 @@ public final class SceneRenderer {
             }
         }
         poseStack.scale(size, size, size);
-        minecraft.getItemRenderer().renderStatic(stack, ItemDisplayContext.FIXED, light, OverlayTexture.NO_OVERLAY, poseStack, buffers,
-                level, index);
+        minecraft.getItemRenderer().renderStatic(stack, ItemDisplayContext.FIXED, light, OverlayTexture.NO_OVERLAY, poseStack,
+                solidItems(buffers), level, index);
         poseStack.popPose();
     }
 
@@ -813,7 +820,7 @@ public final class SceneRenderer {
         poseStack.pushPose();
         place.run();
         Minecraft.getInstance().getItemRenderer().renderStatic(stack, ItemDisplayContext.FIXED, light, OverlayTexture.NO_OVERLAY,
-                poseStack, buffers, level, 0);
+                poseStack, solidItems(buffers), level, 0);
         poseStack.popPose();
         ItemStack plain = new ItemStack(stack.getItem());
         if (!Minecraft.getInstance().getItemRenderer().getModel(plain, level, null, 0).isCustomRenderer()) {
@@ -838,6 +845,8 @@ public final class SceneRenderer {
             return;
         }
         ShadowBuffers.alpha = alpha;
+        // Where the light comes from in the drawn faces' space: the pose's normals, before the flattening (which they never take).
+        poseStack.last().normal().transform(ShadowBuffers.light.set(LIGHT_DIRECTION)).normalize();
         poseStack.pushPose();
         Matrix4f flatten = new Matrix4f().translate(0.0F, planeY + 0.06F, 0.0F);
         Matrix4f shear = new Matrix4f().m10(SHADOW_SHEAR_X).m11(0.0004F).m12(SHADOW_SHEAR_Z);
@@ -873,6 +882,26 @@ public final class SceneRenderer {
         Vector3f normal = pose.normal().transform(new Vector3f(0.0F, 1.0F, 0.0F));
         consumer.addVertex(point.x, point.y, point.z, argb, u, v, OverlayTexture.NO_OVERLAY, LightTexture.FULL_BRIGHT, normal.x, normal.y,
                 normal.z);
+    }
+
+    /**
+     * Buffers for an opaque item drawn into the scene. The item renderer asks for the block atlas' see-through type, which the scene
+     * draws as CLEAR: no depth, sorted by the middles of the quads. An item's face is one quad with its middle in the item's, so
+     * once it was tipped, the one-pixel sides of its near half were drawn after it and over it, dark lines across the item.
+     * Through these the type goes into {@link #ITEMS}, which writes depth as the game's item drawing does. Anything else (an
+     * outline, a shadow, a see-through twin) keeps its own buffers.
+     */
+    public static MultiBufferSource solidItems(MultiBufferSource buffers) {
+        if (buffers != sceneSource) {
+            return buffers;
+        }
+        return type -> {
+            if (type != Sheets.translucentCullBlockSheet()) {
+                return buffers.getBuffer(type);
+            }
+            KeptTypes.keep(sceneBuffers, type);
+            return sceneBuffers.getBuffer(ITEMS);
+        };
     }
 
     private static boolean isBlockLike(ItemStack stack, ClientLevel level) {
@@ -1104,6 +1133,8 @@ public final class SceneRenderer {
     /** Sends everything drawn through it into one see-through black layer: the shadow of whatever is drawn. */
     private static final class ShadowBuffers implements MultiBufferSource {
         private static float alpha = 0.5F;
+        /** The direction to the light, in the space of the normals drawn into the shadow. */
+        private static final Vector3f light = new Vector3f(LIGHT_DIRECTION);
         private final MultiBufferSource buffers;
 
         ShadowBuffers(MultiBufferSource buffers) {
@@ -1116,7 +1147,7 @@ public final class SceneRenderer {
                 KeptTypes.keep(buffers, type);
             }
             int a = Math.round(alpha * 255.0F);
-            return new TintedConsumer(buffers.getBuffer(OVERLAY), a << 24);
+            return new LitFaces(new TintedConsumer(buffers.getBuffer(OVERLAY), a << 24), light);
         }
     }
 }

@@ -37,7 +37,9 @@ import java.util.Set;
 /**
  * What a {@link NodePainter#smooth() smooth} painter draws: kept from the level render and drawn over the finished frame from
  * the focus screen, four times as fine each way into a target of its own and scaled down, so its edges have no steps
- * (the game draws without anti-aliasing). Only the part of the screen it covers is drawn that fine.
+ * (the game draws without anti-aliasing). Only the part of the screen it covers is drawn that fine. Where the fine targets
+ * fail (a driver that refuses them), the painters are still drawn over the frame, only as fine as the screen: a block beside
+ * the station never covers them.
  */
 public final class SmoothPass {
     /** Each way: 4 is sixteen samples a pixel. Two halvings take it down, each an exact average of four. */
@@ -56,7 +58,10 @@ public final class SmoothPass {
     private static final Matrix4f VIEW_PROJECTION = new Matrix4f();
     private static TextureTarget fine;
     private static TextureTarget half;
+    /** The fine targets failed once: painters are drawn straight over the frame from then on. */
     private static boolean failed;
+    /** Drawing straight over the frame failed too: painters are drawn with the scene. */
+    private static boolean broken;
     private static MultiBufferSource.BufferSource buffers;
 
     private SmoothPass() {
@@ -75,7 +80,7 @@ public final class SmoothPass {
      * frame and must be drawn with the scene.
      */
     static boolean defer(NodePainter painter, PoseStack poseStack, int light) {
-        if (failed || !(Minecraft.getInstance().screen instanceof FocusScreen)) {
+        if (broken || !(Minecraft.getInstance().screen instanceof FocusScreen)) {
             return false;
         }
         PENDING.add(new Pending(painter, new Matrix4f(poseStack.last().pose()), new Matrix3f(poseStack.last().normal()), light));
@@ -88,13 +93,44 @@ public final class SmoothPass {
             return;
         }
         try {
-            drawPending();
+            if (!failed) {
+                try {
+                    drawPending();
+                    return;
+                } catch (RuntimeException e) {
+                    failed = true;
+                    DiegesisMod.LOGGER.error("Smooth drawing failed; smooth painters are drawn over the frame without smoothing from now on", e);
+                    Minecraft.getInstance().getMainRenderTarget().bindWrite(true);
+                }
+            }
+            drawStraight();
         } catch (RuntimeException e) {
-            failed = true;
-            DiegesisMod.LOGGER.error("Smooth drawing failed; smooth painters are drawn with the scene from now on", e);
+            broken = true;
+            DiegesisMod.LOGGER.error("Drawing over the frame failed; smooth painters are drawn with the scene from now on", e);
         } finally {
             PENDING.clear();
             Minecraft.getInstance().getMainRenderTarget().bindWrite(true);
+        }
+    }
+
+    /**
+     * The painters straight onto the frame, as fine as the screen: over everything the level drew, with a depth of their own
+     * cleared before and after, so neither the level nor the screen drawn after them meets it.
+     */
+    private static void drawStraight() {
+        RenderTarget main = Minecraft.getInstance().getMainRenderTarget();
+        main.bindWrite(true);
+        RenderSystem.clear(GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
+        try {
+            withMatrices(PROJECTION, () -> {
+                MultiBufferSource.BufferSource source = buffers();
+                for (Pending pending : PENDING) {
+                    pending.painter().paint(poseOf(pending), source, pending.light());
+                }
+                source.endBatch();
+            });
+        } finally {
+            RenderSystem.clear(GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
         }
     }
 

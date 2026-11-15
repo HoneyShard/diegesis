@@ -4,6 +4,14 @@ All notable changes to this mod are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Fixed
+- Items in a scene keep their depth when tipped: a bucket being poured, or anything leaning, no longer shows dark lines
+  across its face where its one-pixel sides were drawn over it.
+- The shadow of a carried item is even: it no longer shows darker stripes and bands where the item's front and back overlapped.
+- Where a graphics driver refuses the targets smooth painters are drawn into, they are still drawn over the finished frame,
+  only without smoothing; before, they went back into the scene, where a block beside the station could cover them.
+
 ## [1.0.0-beta.9+1.21.1] - 2026-11-14
 ### Added
 - `NodeView.setFoam(coverage, color)`: foam on a tank's liquid, clinging to the walls first and lying in patches further in,
