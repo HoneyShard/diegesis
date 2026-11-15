@@ -38,6 +38,7 @@ public static final StationType STILL = Diegesis.station(ResourceLocation.fromNa
 | `reach(double)` | `6` | How far (blocks) from the eyes to the block centre a player may work. |
 | `exclusive()` | shared | One player at a time; others get the block's normal use while it is busy. |
 | `hidesBlock()` | off | The block's own model is not drawn while the station is in use: the scene shows it instead, so its parts can open and move. Any block, also another mod's. |
+| `hidesBlocks(span)` | off | `hidesBlock()` for a multiblock: the other blocks `span` names (asked every tick, from the main block) are left out with the main block, for a tower whose parts lift off. Each must be one of the station's blocks. |
 | `idleLogic()` | off | Shows the block's real state in an `idle_visible` scene while nobody works at the station, with no traffic: every client near it runs its own copy of the logic's `tick`. For blocks that are no `StationHost` but send their content to clients anyway; the logic binds the slots as on the server and only reads and sets the state there. |
 
 At least one block, supplier or tag is required.

@@ -57,6 +57,7 @@ public final class NodeInstance implements NodeView {
     /** The outline as code wants it; null leaves it to the hover. */
     private Boolean outlined;
     private boolean onTop;
+    private boolean outlineSeenOnly;
     private int tint;
     private Visual visualOverride;
     private Component tooltipOverride;
@@ -200,6 +201,16 @@ public final class NodeInstance implements NodeView {
     @Override
     public void setOnTop(boolean value) {
         onTop = value;
+    }
+
+    @Override
+    public void setOutlineSeenOnly(boolean value) {
+        outlineSeenOnly = value;
+    }
+
+    /** Whether the outline leaves out what other things hide of the node. */
+    public boolean isOutlineSeenOnly() {
+        return outlineSeenOnly;
     }
 
     /** Whether the node is drawn over everything while the local player works here. */

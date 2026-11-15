@@ -69,6 +69,17 @@ public interface StationBehavior {
     }
 
     /**
+     * The local player turned the mouse wheel over the scene, {@code node} under the cursor (null over nothing), before the
+     * library turns a control or a placed object with it: going up or down a tower, leafing through something. Return true when
+     * that was handled here.
+     *
+     * @param amount the wheel's turn, positive away from the player (up)
+     */
+    default boolean onScroll(StationView view, String node, double amount) {
+        return false;
+    }
+
+    /**
      * Shift + click on a stack of the player's inventory while working at the station. Return true when the station takes care
      * of it (it sends its own action); false lets the library move the stack into the station's slots as usual.
      *

@@ -193,6 +193,19 @@ public interface StationView {
     Optional<String> currentGlance();
 
     /**
+     * Moves the whole camera of the station (its shot, seat, inventory shot and glances) by {@code x}, {@code y}, {@code z} scene
+     * pixels; it glides there. For a station whose work moves, such as a tower worked at different heights. Kept until set again.
+     * Set from {@code onSceneReady} or {@code onOpen}, the camera flies straight to the moved shot.
+     */
+    default void moveCamera(float x, float y, float z) {
+    }
+
+    /** How far the camera is moved by {@link #moveCamera}, scene pixels. */
+    default org.joml.Vector3fc cameraMove() {
+        return new org.joml.Vector3f();
+    }
+
+    /**
      * Shows a short line at the edge of the screen while the local player works at the station (scene field
      * {@code captions}): whose turn it is, what just happened. It replaces the line shown before.
      *

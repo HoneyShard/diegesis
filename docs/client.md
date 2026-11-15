@@ -24,6 +24,7 @@ default.
 | `onStateChanged(view, changes)` | Slots, controls, tanks or outputs changed, by any player or by the logic. `changes.slots()`, `controls()`, `outputs()`, `tanks()` name what. |
 | `onEvent(view, event)` | The local player did something (below). |
 | `onItemClick(view, node, stack, button, shift)` | The local player clicked a node with `stack` on the cursor (or let it go there), before it goes anywhere: return true when you handled it, usually with `sendAction`, and no slot sees the click. A bowl dipped into a soup, a tool touched to a part; `shift` for the whole stack at once. |
+| `onScroll(view, node, amount)` | The mouse wheel over the scene, `node` under the cursor (null over nothing), before the library turns a control or a placed object: return true when you handled it. Going up or down a tower, leafing through something; `amount` positive away from the player. |
 | `onInventoryShiftClick(view, slot, stack)` | Shift + click on a stack of the inventory: return true when the station takes it itself (a stack laid on a board), false for the usual move into its slots. |
 | `onEffect(view, effect, node, data)` | The logic played an effect (`StationContext.effect`), after the effect itself. |
 
@@ -58,7 +59,8 @@ click it refuses or `showOverlay(null)`),
 `setCarriedHidden(boolean)` (the library leaves out the stack on the cursor while it is over the scene, so the station draws it
 as the tool it is: a knife that comes down when clicked; set it every frame it should hold),
 `glance(id)`, `glanceBack()` and `currentGlance()` (the camera's `glances`: show the player something at a moment of your
-choosing; a glance without an `edge` exists for this).
+choosing; a glance without an `edge` exists for this), `moveCamera(x, y, z)` and `cameraMove()` (the whole camera, its
+shot, seat, inventory shot and glances, moved by that many scene pixels and gliding there: work at another height of a tower).
 
 ### NodeView
 
@@ -83,6 +85,7 @@ belong to this client only.
 | `setFloating(floaters, count)` | Floats `count` things on its liquid, in turns from a list of `Floater(sprite, color, size[, solid])`: slices of voxels built from the sprite's pixels (or, not solid, the flat sprite), riding the waves; a strong current turns them over now and then. They come up from below one by one, overshoot and ring the surface; things no longer in the list leave. Built-in tintable sprites: `Floater.COIN`, `CHUNK`, `NUGGET`, `SHRED`, `LEAF`, `DROP`. |
 | `setFloatingObstacles(x, z, radius, ...)` | What stands in its liquid, in the node's pixels: what floats is pushed aside and goes round it, as round a spoon. Call it every frame while it moves. Floaters push each other by themselves. |
 | `setOnTop(true)` | Draws its own visual and shape over everything while the local player works at the station, smooth as a `NodePainter` with `smooth()`: a badge beside an object that the block or a neighbour must not hide. A tank's liquid comes along inside its walls: a mug held low before a keg's tap, not cut by the floor. Others see it drawn with the scene. |
+| `setOutlineSeenOnly(true)` | The hover outline goes round only what the player sees of the node: one basket of a stack outlines as its own band, not as its whole shape through the baskets over it. Off by default (the whole silhouette, as a glowing entity's); under a shader pack the whole silhouette stays. |
 | `setPainter(painter)` | Draws by code at the node every frame, with the scene (`NodePainter.paint(poseStack, buffers, light)`, in the node's pixels): a vanilla model, text and items on a page. `DiegesisClient.tinted(buffers, argb)` tints or fades what is drawn through it, block items too. |
 | `leaveWake(x, z[, width, strength])` | Leaves a trail on its liquid: call it as something moves through. A furrow in the liquid's own colour, lit on one side, that stays in the liquid, goes round with `setCurrent`, runs out and fades. `width` in the node's pixels, `strength` 0 to 1. Square tanks seen from above. |
 | `setWakeLook(seconds, contrast)` | How long trails stay on its liquid and how clearly they stand out, 0 to 1 (default 2.5 and 0.6): thin water forgets a stir at once, a thick soup keeps it. |

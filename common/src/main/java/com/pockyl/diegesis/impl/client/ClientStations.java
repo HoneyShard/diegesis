@@ -140,7 +140,7 @@ public final class ClientStations {
         if (level != null) {
             for (ClientStation station : stations.values()) {
                 if (station.type().hidesBlock() && (station.isInSession() || station.holdsBlock())) {
-                    hidden.add(station.pos());
+                    hidden.addAll(station.type().hiddenBlocks(level, station.pos()));
                 }
             }
         }

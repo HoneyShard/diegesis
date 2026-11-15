@@ -53,6 +53,7 @@ public final class StationType {
     private final boolean shared;
     private final List<Seat> seats;
     private final boolean hidesBlock;
+    private final Span hidden;
     private final boolean idleLogic;
 
     private StationType(Builder builder) {
@@ -72,12 +73,31 @@ public final class StationType {
         this.shared = builder.shared;
         this.seats = List.copyOf(builder.seats);
         this.hidesBlock = builder.hidesBlock;
+        this.hidden = builder.hidden;
         this.idleLogic = builder.idleLogic;
     }
 
     /** Whether the scene stands in for the block's own model while the station is in use. */
     public boolean hidesBlock() {
         return hidesBlock;
+    }
+
+    /**
+     * The blocks the scene stands in for while the station is in use ({@link Builder#hidesBlocks}): the main block alone unless the
+     * station names more. Empty when it hides none.
+     */
+    public java.util.Collection<BlockPos> hiddenBlocks(BlockGetter level, BlockPos pos) {
+        if (!hidesBlock) {
+            return List.of();
+        }
+        java.util.Collection<BlockPos> more = hidden.blocks(level, pos);
+        if (more.isEmpty()) {
+            return List.of(pos);
+        }
+        Set<BlockPos> all = new LinkedHashSet<>();
+        all.add(pos);
+        more.forEach(block -> all.add(block.immutable()));
+        return all;
     }
 
     /** Whether the logic also runs on clients while nobody works at the station ({@link Builder#idleLogic}). */
@@ -230,6 +250,19 @@ public final class StationType {
         BlockPos resolve(BlockGetter level, BlockPos pos, BlockState state);
     }
 
+    /**
+     * The other blocks of a multiblock station that its scene stands in for together with the main block, for one that
+     * {@link Builder#hidesBlocks}: a tower whose parts lift off, a long table whose leaves fold.
+     */
+    @FunctionalInterface
+    public interface Span {
+        /** Only the main block. */
+        Span NONE = (level, pos) -> List.of();
+
+        /** The other blocks to hide with the main block at {@code pos}; asked every tick while the station is in use. */
+        java.util.Collection<BlockPos> blocks(BlockGetter level, BlockPos pos);
+    }
+
     /** How the scene is turned for a use of the station. */
     public enum Orientation {
         /** The block's facing property when it has one, otherwise towards the player who opens it. */
@@ -266,6 +299,7 @@ public final class StationType {
 
     public static final class Builder {
         private boolean hidesBlock;
+        private Span hidden = Span.NONE;
         private boolean idleLogic;
         private final ResourceLocation id;
         private final Set<Block> blocks = new LinkedHashSet<>();
@@ -375,6 +409,17 @@ public final class StationType {
          */
         public Builder hidesBlock() {
             hidesBlock = true;
+            return this;
+        }
+
+        /**
+         * {@link #hidesBlock()} for a multiblock: the other blocks {@code span} names are hidden with the main block, for everyone
+         * who sees the station, while it is in use. Each must be one of the station's blocks (they open it through its
+         * {@link #anchor}), so that its model can be left out; their block entity renderers go on drawing.
+         */
+        public Builder hidesBlocks(Span span) {
+            hidesBlock = true;
+            hidden = Objects.requireNonNull(span);
             return this;
         }
 

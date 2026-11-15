@@ -236,6 +236,7 @@ obj("node", "NodeDefinition",
         "grabbable": field({"$ref": "#/definitions/grabbable"}, "The player can pick the node up and carry it."),
         "slot": field({"$ref": "#/definitions/slot"}, "The node is a place for the item of a station slot."),
         "drop_zone": field({"type": "string"}, "A slot group: a stack clicked or let go here goes into that group. The cursor passes through while nothing fits."),
+        "takes_items": field({"type": "boolean", "default": False}, "While a stack is on the cursor the node is hovered and its click goes to onItemClick, for places a station lays things on by code."),
         "output": field({"$ref": "#/definitions/output"}, "The node shows a station output; clicking takes it."),
         "control": field({"$ref": "#/definitions/control"}, "The node is a button, toggle, knob or slider driving a"
                                                             " station control."),
