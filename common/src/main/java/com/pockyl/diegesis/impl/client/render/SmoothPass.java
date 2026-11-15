@@ -7,11 +7,11 @@ import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import net.minecraft.client.Minecraft;
@@ -29,9 +29,13 @@ import com.pockyl.diegesis.DiegesisMod;
 import com.pockyl.diegesis.api.client.NodePainter;
 import com.pockyl.diegesis.impl.client.focus.FocusScreen;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -53,6 +57,8 @@ public final class SmoothPass {
     }
 
     private static final List<Pending> PENDING = new ArrayList<>();
+    /** Scratch buffers the painters are measured in, one per render type, kept between frames. */
+    private static final Map<RenderType, ByteBufferBuilder> MEASURING = new HashMap<>();
     private static final Matrix4f PROJECTION = new Matrix4f();
     private static final Matrix4f VIEW = new Matrix4f();
     private static final Matrix4f VIEW_PROJECTION = new Matrix4f();
@@ -295,17 +301,30 @@ public final class SmoothPass {
 
     /**
      * The box on the screen the kept painters cover, in framebuffer pixels from the bottom left: {x0, y0, x1, y1}; null when
-     * they draw nothing on it. They draw once into a consumer that only measures; the types they ask for go into
+     * they draw nothing on it. They draw once into scratch buffers of the game's own kind, read back afterwards: Iris on Sodium
+     * writes text straight into the buffer under a vertex consumer and takes no other kind. The types they ask for go into
      * {@code measured}, to be drawn after all.
      */
     private static int[] measure(int screenWidth, int screenHeight, Set<RenderType> measured) {
-        Bounds bounds = new Bounds();
+        Map<RenderType, BufferBuilder> building = new LinkedHashMap<>();
         MultiBufferSource measuring = type -> {
             measured.add(type);
-            return bounds;
+            return building.computeIfAbsent(type, ignored -> new BufferBuilder(
+                    MEASURING.computeIfAbsent(type, unused -> new ByteBufferBuilder(256)), type.mode(), type.format()));
         };
-        for (Pending pending : PENDING) {
-            pending.painter().paint(poseOf(pending), measuring, pending.light());
+        Bounds bounds = new Bounds();
+        try {
+            for (Pending pending : PENDING) {
+                pending.painter().paint(poseOf(pending), measuring, pending.light());
+            }
+        } finally {
+            for (BufferBuilder builder : building.values()) {
+                try (MeshData mesh = builder.build()) {
+                    if (mesh != null) {
+                        bounds.add(mesh);
+                    }
+                }
+            }
         }
         if (bounds.empty()) {
             return null;
@@ -317,8 +336,8 @@ public final class SmoothPass {
         return x1 > x0 && y1 > y0 ? new int[] {x0, y0, x1, y1} : null;
     }
 
-    /** Takes the vertices of a draw only to find where on the screen they land; one behind the camera covers it all. */
-    private static final class Bounds implements VertexConsumer {
+    /** Where on the screen the vertices of a draw land; one behind the camera covers it all. */
+    private static final class Bounds {
         private final Vector4f clip = new Vector4f();
         float minX = Float.POSITIVE_INFINITY;
         float minY = Float.POSITIVE_INFINITY;
@@ -329,21 +348,25 @@ public final class SmoothPass {
             return minX > maxX || minY > maxY || maxX < -1.0F || minX > 1.0F || maxY < -1.0F || minY > 1.0F;
         }
 
-        @Override
-        public void addVertex(float x, float y, float z, int color, float u, float v, int overlay, int light, float normalX, float normalY,
-                float normalZ) {
-            addVertex(x, y, z);
+        /** Every vertex format starts with the position, three floats. */
+        void add(MeshData mesh) {
+            ByteBuffer vertices = mesh.vertexBuffer();
+            int size = mesh.drawState().format().getVertexSize();
+            int count = mesh.drawState().vertexCount();
+            for (int i = 0; i < count; i++) {
+                int at = vertices.position() + i * size;
+                add(vertices.getFloat(at), vertices.getFloat(at + 4), vertices.getFloat(at + 8));
+            }
         }
 
-        @Override
-        public VertexConsumer addVertex(float x, float y, float z) {
+        private void add(float x, float y, float z) {
             VIEW_PROJECTION.transform(clip.set(x, y, z, 1.0F));
             if (clip.w <= 1.0e-4F) {
                 minX = -1.0F;
                 minY = -1.0F;
                 maxX = 1.0F;
                 maxY = 1.0F;
-                return this;
+                return;
             }
             float ndcX = Math.max(-1.0F, Math.min(1.0F, clip.x / clip.w));
             float ndcY = Math.max(-1.0F, Math.min(1.0F, clip.y / clip.w));
@@ -351,32 +374,6 @@ public final class SmoothPass {
             minY = Math.min(minY, ndcY);
             maxX = Math.max(maxX, ndcX);
             maxY = Math.max(maxY, ndcY);
-            return this;
-        }
-
-        @Override
-        public VertexConsumer setColor(int red, int green, int blue, int alpha) {
-            return this;
-        }
-
-        @Override
-        public VertexConsumer setUv(float u, float v) {
-            return this;
-        }
-
-        @Override
-        public VertexConsumer setUv1(int u, int v) {
-            return this;
-        }
-
-        @Override
-        public VertexConsumer setUv2(int u, int v) {
-            return this;
-        }
-
-        @Override
-        public VertexConsumer setNormal(float x, float y, float z) {
-            return this;
         }
     }
 }
