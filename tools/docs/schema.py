@@ -321,6 +321,8 @@ obj("slot", "SlotBinding", "A place for an item of a station slot; clicked like 
     "counts": field({"type": "string", "enum": ["always", "hover", "never"]},
                     "When the stack's count is drawn; hover keeps slots close together readable.", "always"),
     "highlight": field(BOOL, "The square over the slot under the cursor; off for things that are no slots to the eye.", True),
+    "count_facing": field({"type": "string", "enum": ["up", "front"]},
+                          "up: the count lies on the slot; front: it stands at the item's foot facing the front.", "up"),
 }, required=["slot"])
 
 obj("output", "OutputBinding", "Shows a result the station logic computes; clicking takes it.", {

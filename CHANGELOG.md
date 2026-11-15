@@ -27,11 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   opened, with one empty square always: nothing moves while the player works.
 - Drawer option `carry_size`: a stack taken from the inventory drawer is carried over the scene at that size, as big as the
   station's own items, instead of the size of the last stack carried.
+- Slot option `count_facing: front`: the count stands at the item's foot facing the block's front, readable when the camera
+  looks into a hollow of a wall rather than down onto a table.
 - Camera option `interactive_at`: clicks count from that share of the flight in (default 1: once the camera has arrived).
 
 ### Fixed
 - Items in a scene keep their depth when tipped: a bucket being poured, or anything leaning, no longer shows dark lines
   across its face where its one-pixel sides were drawn over it.
+- The shadow of a carried item is even: it no longer shows darker stripes and bands where the item's front and back overlapped.
 
 ## [1.0.0-beta.9+1.20.1] - 2026-11-14
 ### Added

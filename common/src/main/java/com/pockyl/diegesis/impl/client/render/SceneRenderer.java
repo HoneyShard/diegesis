@@ -360,7 +360,7 @@ public final class SceneRenderer {
                         level);
                 boolean counted = slot.counts() == SlotBinding.Counts.ALWAYS || slot.counts() == SlotBinding.Counts.HOVER && local && node.isHovered();
                 if (slot.display() != SlotBinding.ItemDisplay.HIDDEN && counted) {
-                    renderCount(poseStack, buffers, stack, slot.size());
+                    renderCount(poseStack, buffers, stack, slot.size(), slot.countFacing() == SlotBinding.CountFacing.FRONT);
                 }
             });
             definition.output().ifPresent(output -> {
@@ -717,22 +717,38 @@ public final class SceneRenderer {
      * a vanilla slot. Nothing for single items.
      */
     private static void renderCount(PoseStack poseStack, MultiBufferSource buffers, ItemStack stack, float slotSize) {
+        renderCount(poseStack, buffers, stack, slotSize, false);
+    }
+
+    private static void renderCount(PoseStack poseStack, MultiBufferSource buffers, ItemStack stack, float slotSize, boolean standing) {
         if (stack.isEmpty() || stack.getCount() <= 1) {
             return;
         }
-        renderCount(poseStack, buffers, String.valueOf(stack.getCount()), slotSize);
+        renderCount(poseStack, buffers, String.valueOf(stack.getCount()), slotSize, standing);
     }
 
     private static void renderCount(PoseStack poseStack, MultiBufferSource buffers, String text, float slotSize) {
+        renderCount(poseStack, buffers, text, slotSize, false);
+    }
+
+    /** A count at the slot's near right corner: lying on the slot, or {@code standing} at the item's foot, facing the front. */
+    private static void renderCount(PoseStack poseStack, MultiBufferSource buffers, String text, float slotSize, boolean standing) {
         if (!ui.showCounts()) {
             return;
         }
         Font font = Minecraft.getInstance().font;
         float scale = slotSize * 0.42F / font.lineHeight;
         poseStack.pushPose();
-        // The player's right is -x and the near side -z: the font's x runs to -x, its y (down the page) to -z.
-        poseStack.translate(-slotSize / 2.0F, 0.12F, -slotSize / 2.0F);
-        Matrix4f flat = new Matrix4f(-scale, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, -scale, 0.0F, 0.0F, scale, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F);
+        Matrix4f flat;
+        if (standing) {
+            // The font's x runs to -x (the player's right), its y (down the page) down, its z towards the front.
+            poseStack.translate(-slotSize / 2.0F, 0.12F, -0.35F);
+            flat = new Matrix4f(-scale, 0.0F, 0.0F, 0.0F, 0.0F, -scale, 0.0F, 0.0F, 0.0F, 0.0F, -scale, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F);
+        } else {
+            // The player's right is -x and the near side -z: the font's x runs to -x, its y (down the page) to -z.
+            poseStack.translate(-slotSize / 2.0F, 0.12F, -slotSize / 2.0F);
+            flat = new Matrix4f(-scale, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, -scale, 0.0F, 0.0F, scale, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F);
+        }
         Matrix4f matrix = new Matrix4f(poseStack.last().pose()).mul(flat);
         float x = -font.width(text) + 0.5F;
         float y = -font.lineHeight + 1.5F;
@@ -857,6 +873,8 @@ public final class SceneRenderer {
             return;
         }
         ShadowBuffers.alpha = alpha;
+        // Where the light comes from in the drawn faces' space: the pose's normals, before the flattening (which they never take).
+        poseStack.last().normal().transform(ShadowBuffers.light.set(LIGHT_DIRECTION)).normalize();
         poseStack.pushPose();
         Matrix4f flatten = new Matrix4f().translate(0.0F, planeY + 0.06F, 0.0F);
         Matrix4f shear = new Matrix4f().m10(SHADOW_SHEAR_X).m11(0.0004F).m12(SHADOW_SHEAR_Z);
@@ -1142,6 +1160,8 @@ public final class SceneRenderer {
     /** Sends everything drawn through it into one see-through black layer: the shadow of whatever is drawn. */
     private static final class ShadowBuffers implements MultiBufferSource {
         private static float alpha = 0.5F;
+        /** The direction to the light, in the space of the normals drawn into the shadow. */
+        private static final Vector3f light = new Vector3f(LIGHT_DIRECTION);
         private final MultiBufferSource buffers;
 
         ShadowBuffers(MultiBufferSource buffers) {
@@ -1154,7 +1174,7 @@ public final class SceneRenderer {
                 KeptTypes.keep(buffers, type);
             }
             int a = Math.round(alpha * 255.0F);
-            return new TintedConsumer(buffers.getBuffer(OVERLAY), a << 24);
+            return new LitFaces(new TintedConsumer(buffers.getBuffer(OVERLAY), a << 24), light);
         }
     }
 }

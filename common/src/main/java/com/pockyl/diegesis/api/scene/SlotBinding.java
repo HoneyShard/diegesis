@@ -19,19 +19,49 @@ import java.util.Optional;
  * @param counts   when the stack's count is drawn: slots close together stay readable with {@code hover}
  * @param highlight the square laid over the slot under the cursor; off for things that are no slots to the eye, as food
  *                  swimming in a pot (the hover outline stays)
+ * @param countFacing which way the count's digits face: lying on the slot ({@code up}), or standing at the item's foot facing the
+ *                    block's front ({@code front}), for an item standing in a wall's hollow that the camera looks at straight
  */
-public record SlotBinding(SlotRef slot, ItemDisplay display, float size, Optional<Float> itemSize, Counts counts, boolean highlight) {
+public record SlotBinding(SlotRef slot, ItemDisplay display, float size, Optional<Float> itemSize, Counts counts, boolean highlight,
+        CountFacing countFacing) {
     public static final Codec<SlotBinding> CODEC = StrictCodecs.record(instance -> instance.group(
             SlotRef.CODEC.fieldOf("slot").forGetter(SlotBinding::slot),
             StrictCodecs.optional(ItemDisplay.CODEC, "display", ItemDisplay.FLAT).forGetter(SlotBinding::display),
             StrictCodecs.optional(Codec.floatRange(1.0F, 64.0F), "size", 6.0F).forGetter(SlotBinding::size),
             StrictCodecs.optional(Codec.floatRange(0.5F, 64.0F), "item_size").forGetter(SlotBinding::itemSize),
             StrictCodecs.optional(Counts.CODEC, "counts", Counts.ALWAYS).forGetter(SlotBinding::counts),
-            StrictCodecs.optional(Codec.BOOL, "highlight", true).forGetter(SlotBinding::highlight)
+            StrictCodecs.optional(Codec.BOOL, "highlight", true).forGetter(SlotBinding::highlight),
+            StrictCodecs.optional(CountFacing.CODEC, "count_facing", CountFacing.UP).forGetter(SlotBinding::countFacing)
     ).apply(instance, SlotBinding::new));
+
+    /** A slot whose count lies on it. */
+    public SlotBinding(SlotRef slot, ItemDisplay display, float size, Optional<Float> itemSize, Counts counts, boolean highlight) {
+        this(slot, display, size, itemSize, counts, highlight, CountFacing.UP);
+    }
 
     public static SlotBinding of(SlotRef slot) {
         return new SlotBinding(slot, ItemDisplay.FLAT, 6.0F, Optional.empty(), Counts.ALWAYS, true);
+    }
+
+    /** Which way a slot's count faces. */
+    public enum CountFacing implements StringRepresentable {
+        /** Lying on the slot, read from above. */
+        UP("up"),
+        /** Standing at the item's foot, facing the block's front. */
+        FRONT("front");
+
+        public static final Codec<CountFacing> CODEC = StringRepresentable.fromEnum(CountFacing::values);
+
+        private final String name;
+
+        CountFacing(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public String getSerializedName() {
+            return name;
+        }
     }
 
     /** The size the item is drawn at. */

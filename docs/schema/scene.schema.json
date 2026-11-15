@@ -1170,6 +1170,15 @@
           "type": "boolean",
           "description": "The square over the slot under the cursor; off for things that are no slots to the eye.",
           "default": true
+        },
+        "count_facing": {
+          "type": "string",
+          "enum": [
+            "up",
+            "front"
+          ],
+          "description": "up: the count lies on the slot; front: it stands at the item's foot facing the front.",
+          "default": "up"
         }
       },
       "patternProperties": {
@@ -3710,6 +3719,23 @@
             }
           ],
           "description": "The square over the slot under the cursor; off for things that are no slots to the eye."
+        },
+        "count_facing": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "up",
+                "front"
+              ],
+              "description": "up: the count lies on the slot; front: it stands at the item's foot facing the front.",
+              "default": "up"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "up: the count lies on the slot; front: it stands at the item's foot facing the front."
         }
       },
       "patternProperties": {

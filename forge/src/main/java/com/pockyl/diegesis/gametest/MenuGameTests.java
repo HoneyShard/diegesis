@@ -48,6 +48,8 @@ import java.util.UUID;
 @PrefixGameTestTemplate(false)
 public final class MenuGameTests {
     private static final MenuBinding TABLE = MenuBinding.of(MenuType.CRAFTING).output("result", 0).slots("grid", 1, 9).build();
+    private static final MenuBinding FURNACE = MenuBinding.of(MenuType.FURNACE).slots("input", 0, 1).slots("fuel", 1, 1)
+            .output("result", 2).build();
 
     private MenuGameTests() {
     }
@@ -162,6 +164,48 @@ public final class MenuGameTests {
         helper.succeed();
     }
 
+    @GameTest(template = "box")
+    public static void furnaceShiftClicksRouteAsVanilla(GameTestHelper helper) {
+        ServerPlayer player = mockPlayer(helper);
+        BlockPos pos = helper.absolutePos(new BlockPos(1, 1, 1));
+        helper.getLevel().setBlockAndUpdate(pos, Blocks.FURNACE.defaultBlockState());
+        player.moveTo(pos.getX() + 0.5, pos.getY() + 1.0, pos.getZ() - 1.0);
+        net.minecraft.world.level.block.entity.FurnaceBlockEntity furnace =
+                (net.minecraft.world.level.block.entity.FurnaceBlockEntity) helper.getLevel().getBlockEntity(pos);
+        AbstractContainerMenu menu = furnace.createMenu(9, player.getInventory(), player);
+        player.containerMenu = menu;
+        Inventory inventory = player.getInventory();
+        inventory.setItem(0, new ItemStack(Items.RAW_IRON, 5));
+        inventory.setItem(1, new ItemStack(Items.COAL, 3));
+        inventory.setItem(2, new ItemStack(Items.OAK_LOG, 4));
+        inventory.setItem(3, new ItemStack(Items.APPLE, 2));
+        // What the hand holds on opening goes in by a shift-click of its hotbar slot: ore to the top, coal to the fire.
+        act(menu, player, FURNACE, click(inv(0), 0, ClickKind.QUICK_MOVE));
+        act(menu, player, FURNACE, click(inv(1), 0, ClickKind.QUICK_MOVE));
+        check(helper, menu.getSlot(0).getItem().is(Items.RAW_IRON) && menu.getSlot(0).getItem().getCount() == 5, "ore in the input");
+        check(helper, menu.getSlot(1).getItem().is(Items.COAL) && menu.getSlot(1).getItem().getCount() == 3, "coal in the fuel");
+        // A log smelts into charcoal, so it goes to the input; that is taken by the ore, so it stays in the inventory.
+        act(menu, player, FURNACE, click(inv(2), 0, ClickKind.QUICK_MOVE));
+        check(helper, count(inventory, Items.OAK_LOG) == 4 && menu.getSlot(1).getItem().is(Items.COAL), "the log is not burnt as fuel");
+        // An apple neither smelts nor burns: shift moves it between the hotbar and the inventory, as in the screen.
+        act(menu, player, FURNACE, click(inv(3), 0, ClickKind.QUICK_MOVE));
+        check(helper, inventory.getItem(3).isEmpty() && count(inventory, Items.APPLE) == 2, "the apple went up to the inventory");
+        // The output: shift takes it all into the inventory.
+        furnace.setItem(2, new ItemStack(Items.IRON_INGOT, 3));
+        act(menu, player, FURNACE, click(new Target.Output("result"), 0, ClickKind.QUICK_MOVE));
+        check(helper, count(inventory, Items.IRON_INGOT) == 3 && menu.getSlot(2).getItem().isEmpty(), "three ingots taken");
+        // A plain click takes it onto the cursor; a click on the fuel slot with coal on the cursor tops it up.
+        furnace.setItem(2, new ItemStack(Items.IRON_INGOT, 2));
+        act(menu, player, FURNACE, click(new Target.Output("result"), 0, ClickKind.PICKUP));
+        check(helper, menu.getCarried().is(Items.IRON_INGOT) && menu.getCarried().getCount() == 2, "ingots on the cursor");
+        act(menu, player, FURNACE, click(inv(5), 0, ClickKind.PICKUP));
+        inventory.setItem(6, new ItemStack(Items.COAL, 2));
+        act(menu, player, FURNACE, click(inv(6), 0, ClickKind.PICKUP));
+        act(menu, player, FURNACE, click(new Target.Station(SlotRef.of("fuel", 0)), 0, ClickKind.PICKUP));
+        check(helper, menu.getSlot(1).getItem().getCount() == 5 && menu.getCarried().isEmpty(), "coal topped up to five");
+        helper.succeed();
+    }
+
     @GameTest(template = "empty")
     public static void menuStationsCheckTheirBinding(GameTestHelper helper) {
         StationSchema schema = StationSchema.builder().slots("grid", 9).output("result").build();
@@ -197,7 +241,11 @@ public final class MenuGameTests {
     }
 
     private static void act(AbstractContainerMenu menu, ServerPlayer player, StationAction action) {
-        for (MenuClicks.Click click : MenuClicks.of(menu, TABLE, player.getInventory(), action)) {
+        act(menu, player, TABLE, action);
+    }
+
+    private static void act(AbstractContainerMenu menu, ServerPlayer player, MenuBinding binding, StationAction action) {
+        for (MenuClicks.Click click : MenuClicks.of(menu, binding, player.getInventory(), action)) {
             menu.clicked(click.slot(), click.button(), click.type(), player);
         }
     }
