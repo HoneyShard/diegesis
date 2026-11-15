@@ -35,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Items in a scene keep their depth when tipped: a bucket being poured, or anything leaning, no longer shows dark lines
   across its face where its one-pixel sides were drawn over it.
 - The shadow of a carried item is even: it no longer shows darker stripes and bands where the item's front and back overlapped.
+- Opening a station with a named entity or another player in the camera's way crashed with Iris on Sodium 0.5 (#3). Name
+  labels, lines and glints of things in the way stay solid now; their bodies still fade.
+- Smooth painters that draw text (Hands-On Delight's recipe book) are drawn smooth with Iris on Sodium too; before, they fell
+  back to the scene's own drawing.
+- With a shader pack, things standing in the camera's way cast their whole shadow.
+- Where a graphics driver refuses the targets smooth painters are drawn into, they are still drawn over the finished frame,
+  only without smoothing; before, they went back into the scene, where a block beside the station could cover them.
 
 ## [1.0.0-beta.9+1.20.1] - 2026-11-14
 ### Added

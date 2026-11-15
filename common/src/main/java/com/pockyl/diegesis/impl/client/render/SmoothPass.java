@@ -8,10 +8,8 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.DefaultedVertexConsumer;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import net.minecraft.client.Minecraft;
@@ -28,15 +26,20 @@ import com.pockyl.diegesis.DiegesisMod;
 import com.pockyl.diegesis.api.client.NodePainter;
 import com.pockyl.diegesis.impl.client.focus.FocusScreen;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * What a {@link NodePainter#smooth() smooth} painter draws: kept from the level render and drawn over the finished frame from
  * the focus screen, four times as fine each way into a target of its own and scaled down, so its edges have no steps
- * (the game draws without anti-aliasing). Only the part of the screen it covers is drawn that fine.
+ * (the game draws without anti-aliasing). Only the part of the screen it covers is drawn that fine. Where the fine targets
+ * fail (a driver that refuses them), the painters are still drawn over the frame, only as fine as the screen: a block beside
+ * the station never covers them.
  */
 public final class SmoothPass {
     /** Each way: 4 is sixteen samples a pixel. Two halvings take it down, each an exact average of four. */
@@ -50,11 +53,16 @@ public final class SmoothPass {
     }
 
     private static final List<Pending> PENDING = new ArrayList<>();
+    /** Scratch buffers the painters are measured in, one per render type, kept between frames. */
+    private static final Map<RenderType, BufferBuilder> MEASURING = new HashMap<>();
     private static final Matrix4f PROJECTION = new Matrix4f();
     private static final Matrix4f VIEW = new Matrix4f();
     private static TextureTarget fine;
     private static TextureTarget half;
+    /** The fine targets failed once: painters are drawn straight over the frame from then on. */
     private static boolean failed;
+    /** Drawing straight over the frame failed too: painters are drawn with the scene. */
+    private static boolean broken;
     private static MultiBufferSource.BufferSource buffers;
 
     private SmoothPass() {
@@ -72,7 +80,7 @@ public final class SmoothPass {
      * frame and must be drawn with the scene.
      */
     static boolean defer(NodePainter painter, PoseStack poseStack, int light) {
-        if (failed || !(Minecraft.getInstance().screen instanceof FocusScreen)) {
+        if (broken || !(Minecraft.getInstance().screen instanceof FocusScreen)) {
             return false;
         }
         PENDING.add(new Pending(painter, new Matrix4f(poseStack.last().pose()), new Matrix3f(poseStack.last().normal()), light));
@@ -85,13 +93,44 @@ public final class SmoothPass {
             return;
         }
         try {
-            drawPending();
+            if (!failed) {
+                try {
+                    drawPending();
+                    return;
+                } catch (RuntimeException e) {
+                    failed = true;
+                    DiegesisMod.LOGGER.error("Smooth drawing failed; smooth painters are drawn over the frame without smoothing from now on", e);
+                    Minecraft.getInstance().getMainRenderTarget().bindWrite(true);
+                }
+            }
+            drawStraight();
         } catch (RuntimeException e) {
-            failed = true;
-            DiegesisMod.LOGGER.error("Smooth drawing failed; smooth painters are drawn with the scene from now on", e);
+            broken = true;
+            DiegesisMod.LOGGER.error("Drawing over the frame failed; smooth painters are drawn with the scene from now on", e);
         } finally {
             PENDING.clear();
             Minecraft.getInstance().getMainRenderTarget().bindWrite(true);
+        }
+    }
+
+    /**
+     * The painters straight onto the frame, as fine as the screen: over everything the level drew, with a depth of their own
+     * cleared before and after, so neither the level nor the screen drawn after them meets it.
+     */
+    private static void drawStraight() {
+        RenderTarget main = Minecraft.getInstance().getMainRenderTarget();
+        main.bindWrite(true);
+        RenderSystem.clear(GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
+        try {
+            withMatrices(PROJECTION, () -> {
+                MultiBufferSource.BufferSource source = buffers();
+                for (Pending pending : PENDING) {
+                    pending.painter().paint(poseOf(pending), source, pending.light());
+                }
+                source.endBatch();
+            });
+        } finally {
+            RenderSystem.clear(GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
         }
     }
 
@@ -257,17 +296,34 @@ public final class SmoothPass {
 
     /**
      * The box on the screen the kept painters cover, in framebuffer pixels from the bottom left: {x0, y0, x1, y1}; null when
-     * they draw nothing on it. They draw once into a consumer that only measures; the types they ask for go into
+     * they draw nothing on it. They draw once into scratch buffers of the game's own kind, read back afterwards: Iris on Sodium
+     * writes text straight into the buffer under a vertex consumer and takes no other kind. The types they ask for go into
      * {@code measured}, to be drawn after all.
      */
     private static int[] measure(int screenWidth, int screenHeight, Set<RenderType> measured) {
-        Bounds bounds = new Bounds();
         MultiBufferSource measuring = type -> {
             measured.add(type);
-            return bounds;
+            BufferBuilder builder = MEASURING.computeIfAbsent(type, ignored -> new BufferBuilder(256));
+            if (!builder.building()) {
+                builder.begin(type.mode(), type.format());
+            }
+            return builder;
         };
-        for (Pending pending : PENDING) {
-            pending.painter().paint(poseOf(pending), measuring, pending.light());
+        Bounds bounds = new Bounds();
+        try {
+            for (Pending pending : PENDING) {
+                pending.painter().paint(poseOf(pending), measuring, pending.light());
+            }
+        } finally {
+            for (BufferBuilder builder : MEASURING.values()) {
+                if (builder.building()) {
+                    BufferBuilder.RenderedBuffer rendered = builder.endOrDiscardIfEmpty();
+                    if (rendered != null) {
+                        bounds.add(rendered);
+                        rendered.release();
+                    }
+                }
+            }
         }
         if (bounds.empty()) {
             return null;
@@ -279,8 +335,8 @@ public final class SmoothPass {
         return x1 > x0 && y1 > y0 ? new int[] {x0, y0, x1, y1} : null;
     }
 
-    /** Takes the vertices of a draw only to find where on the screen they land; one behind the camera covers it all. */
-    private static final class Bounds extends DefaultedVertexConsumer {
+    /** Where on the screen the vertices of a draw land; one behind the camera covers it all. */
+    private static final class Bounds {
         private final Vector4f clip = new Vector4f();
         float minX = Float.POSITIVE_INFINITY;
         float minY = Float.POSITIVE_INFINITY;
@@ -291,15 +347,25 @@ public final class SmoothPass {
             return minX > maxX || minY > maxY || maxX < -1.0F || minX > 1.0F || maxY < -1.0F || minY > 1.0F;
         }
 
-        @Override
-        public VertexConsumer vertex(double x, double y, double z) {
-            PROJECTION.transform(clip.set((float) x, (float) y, (float) z, 1.0F));
+        /** Every vertex format starts with the position, three floats. */
+        void add(BufferBuilder.RenderedBuffer rendered) {
+            ByteBuffer vertices = rendered.vertexBuffer();
+            int size = rendered.drawState().format().getVertexSize();
+            int count = rendered.drawState().vertexCount();
+            for (int i = 0; i < count; i++) {
+                int at = vertices.position() + i * size;
+                add(vertices.getFloat(at), vertices.getFloat(at + 4), vertices.getFloat(at + 8));
+            }
+        }
+
+        private void add(float x, float y, float z) {
+            PROJECTION.transform(clip.set(x, y, z, 1.0F));
             if (clip.w <= 1.0e-4F) {
                 minX = -1.0F;
                 minY = -1.0F;
                 maxX = 1.0F;
                 maxY = 1.0F;
-                return this;
+                return;
             }
             float ndcX = Math.max(-1.0F, Math.min(1.0F, clip.x / clip.w));
             float ndcY = Math.max(-1.0F, Math.min(1.0F, clip.y / clip.w));
@@ -307,36 +373,6 @@ public final class SmoothPass {
             minY = Math.min(minY, ndcY);
             maxX = Math.max(maxX, ndcX);
             maxY = Math.max(maxY, ndcY);
-            return this;
-        }
-
-        @Override
-        public VertexConsumer color(int red, int green, int blue, int alpha) {
-            return this;
-        }
-
-        @Override
-        public VertexConsumer uv(float u, float v) {
-            return this;
-        }
-
-        @Override
-        public VertexConsumer overlayCoords(int u, int v) {
-            return this;
-        }
-
-        @Override
-        public VertexConsumer uv2(int u, int v) {
-            return this;
-        }
-
-        @Override
-        public VertexConsumer normal(float x, float y, float z) {
-            return this;
-        }
-
-        @Override
-        public void endVertex() {
         }
     }
 }

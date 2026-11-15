@@ -124,16 +124,20 @@ public final class ClearView {
 
     /** What the entity noted last draws into: the game's buffers, or fading ones while it may stand in the way. */
     public static MultiBufferSource buffers(MultiBufferSource buffers) {
-        if (strength <= 0.0F || !entities || STRICT_RENDERER || current == null || !mayBeInside(current.getBoundingBox())) {
+        if (strength <= 0.0F || !entities || STRICT_RENDERER || current == null || ShaderShadows.drawing()
+                || !mayBeInside(current.getBoundingBox())) {
             return buffers;
         }
         return type -> {
-            RenderType ghost = GHOSTS.computeIfAbsent(type, ClearView::ghostOf).orElse(type);
-            if (ghost != type) {
-                KeptTypes.keep(buffers, type);
+            Optional<RenderType> ghost = GHOSTS.computeIfAbsent(type, ClearView::ghostOf);
+            if (ghost.isEmpty()) {
+                // Text, lines and glints stay solid and get the game's own buffer: Iris writes a name label straight into
+                // the buffer under its consumer and crashes on any wrapper (Sodium 0.5).
+                return buffers.getBuffer(type);
             }
+            KeptTypes.keep(buffers, type);
             Fading fading = new Fading();
-            fading.delegate = buffers.getBuffer(ghost);
+            fading.delegate = buffers.getBuffer(ghost.get());
             return fading;
         };
     }
