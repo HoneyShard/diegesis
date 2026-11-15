@@ -33,7 +33,7 @@ public final class Diegesis {
         return StationType.builder(id);
     }
 
-    /** Registers a station type. Call it during mod setup, the same on both sides. */
+    /** Registers a station type. Call it during mod setup, the same on both sides; a menu station on the client only. */
     public static StationType register(StationType type) {
         return StationRegistry.register(type);
     }

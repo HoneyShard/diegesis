@@ -56,6 +56,17 @@ public final class HudSlide {
     private HudSlide() {
     }
 
+    /**
+     * Whether the station draws the hotbar itself, in the HUD's place ({@code inventory_drawer.layout: hotbar}): the HUD's own
+     * hotbar is then gone at once as the station opens and back at once as it closes, so the swap is not seen.
+     */
+    private static boolean hotbarKept;
+
+    /** {@link #hotbarKept}, for the station being opened. */
+    public static void keepHotbar(boolean value) {
+        hotbarKept = value;
+    }
+
     /** The HUD starts to leave. */
     public static void out(HudOptions options) {
         if (amount <= 0.0F) {
@@ -79,6 +90,7 @@ public final class HudSlide {
 
     /** Back in place at once: the world was left. */
     public static void reset() {
+        hotbarKept = false;
         amount = 0.0F;
         target = 0.0F;
         EDGES.clear();
@@ -165,6 +177,12 @@ public final class HudSlide {
     private static void offset(String key, int width, int height) {
         shiftX = 0.0F;
         shiftY = 0.0F;
+        if (hotbarKept && HOTBAR.equals(key)) {
+            if (target > 0.0F) {
+                shiftY = height * 2.0F;
+            }
+            return;
+        }
         float[] box = BOXES.get(key);
         if (box == null) {
             // Never seen yet: drawn off the screen while the HUD is mostly away, measured, and placed from the next frame on.

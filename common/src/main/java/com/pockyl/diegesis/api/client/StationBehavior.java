@@ -83,6 +83,14 @@ public interface StationBehavior {
     default void onEffect(StationView view, ResourceLocation effect, String node, CompoundTag data) {
     }
 
+    /** A menu-backed station's vanilla menu arrived from the server: {@link StationView#menu()} is there from now on. */
+    default void onMenuOpened(StationView view) {
+    }
+
+    /** A menu-backed station ended without the local player leaving: the camera flies back on its own. */
+    default void onMenuRefused(StationView view, MenuRefusal why) {
+    }
+
     @FunctionalInterface
     interface Factory {
         StationBehavior create(StationView view);

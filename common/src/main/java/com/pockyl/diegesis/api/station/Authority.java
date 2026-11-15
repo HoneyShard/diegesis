@@ -13,5 +13,11 @@ public enum Authority {
      * and watch the objects being carried. Needs the library on the server; without it the block works as it does in
      * vanilla.
      */
-    SERVER
+    SERVER,
+    /**
+     * The block's own vanilla menu, opened on the server by the block's normal use and never shown: the station's slots are
+     * windows on the menu's slots and every click is the one the vanilla screen would send. Works on any server, with or
+     * without the library there. Set by {@code StationType.Builder.menu}; no {@code StationLogic} runs.
+     */
+    MENU
 }

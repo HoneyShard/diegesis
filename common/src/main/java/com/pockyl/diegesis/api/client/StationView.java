@@ -216,4 +216,12 @@ public interface StationView {
 
     /** Plays a sound at a node (or the station's centre for {@code null}). */
     void playSound(SoundEvent sound, String node, float volume, float pitch);
+
+    /**
+     * The open vanilla menu of a menu-backed station ({@code StationType.Builder.menu}) while the local player works at it;
+     * null for other stations and before the server has opened it.
+     */
+    default MenuAccess menu() {
+        return null;
+    }
 }

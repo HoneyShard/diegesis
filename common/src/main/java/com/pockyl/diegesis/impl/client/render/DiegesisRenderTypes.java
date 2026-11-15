@@ -54,6 +54,16 @@ final class DiegesisRenderTypes extends RenderType {
     }
 
     /**
+     * Items in a scene: the block atlas' translucent entity type the item renderer asks for, which writes depth as the game's
+     * does. The scene draws that type as {@link #clearBlockSheet()}, where an item's own faces have no depth between them.
+     */
+    static RenderType itemSheet() {
+        return of("diegesis_item", DefaultVertexFormat.NEW_ENTITY, true, List.of(RENDERTYPE_ENTITY_TRANSLUCENT_CULL_SHADER,
+                new RenderStateShard.TextureStateShard(TextureAtlas.LOCATION_BLOCKS, false, false), TRANSLUCENT_TRANSPARENCY, CULL, LIGHTMAP,
+                OVERLAY, LEQUAL_DEPTH_TEST, COLOR_DEPTH_WRITE));
+    }
+
+    /**
      * See-through things that stand in each other: glass, the liquid in it, a stream running through. Like the block atlas'
      * translucent entity type, sorted back to front, but it writes no depth: a big pane cannot cut away what is sorted
      * after it, however the two lie. A polygon offset settles it for what lies on something solid, a glass standing on a table

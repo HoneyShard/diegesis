@@ -121,6 +121,9 @@ public final class FocusScreen extends Screen {
 
     /** Whether a GUI point lies over the world (not over the inventory panel). */
     static boolean isOverWorld(double mouseX, double mouseY) {
+        if (keepsHotbar()) {
+            return !HotbarLayout.contains(FocusController.get().station(), Minecraft.getInstance().player.getInventory(), mouseX, mouseY);
+        }
         return panelTop == NO_PANEL || mouseY < panelY() || mouseY >= panelTop + panelHeight || mouseX < panelLeft
                 || mouseX >= panelLeft + panelWidth;
     }
@@ -128,6 +131,10 @@ public final class FocusScreen extends Screen {
     /** The GUI centre of an inventory slot; for the development test driver. */
     @ApiStatus.Internal
     public static int[] slotCenter(int slot) {
+        if (keepsHotbar()) {
+            int[] at = HotbarLayout.center(FocusController.get().station(), Minecraft.getInstance().player.getInventory(), slot);
+            return at != null ? at : new int[] {OFF_SCREEN, OFF_SCREEN};
+        }
         InventoryDrawer drawer = drawer();
         if (drawer != null && drawer.compact()) {
             int index = compactSlots.indexOf(slot);
@@ -144,6 +151,9 @@ public final class FocusScreen extends Screen {
 
     /** Whether the inventory slot is on show now: a stack got there can fly into it. */
     static boolean isSlotShown(int slot) {
+        if (keepsHotbar()) {
+            return slotCenter(slot)[0] != OFF_SCREEN;
+        }
         if (!showsInventory() || panelTop == NO_PANEL || slotCenter(slot)[0] == OFF_SCREEN) {
             return false;
         }
@@ -154,7 +164,10 @@ public final class FocusScreen extends Screen {
     private void renderGains(GuiGraphics graphics, FocusInput input) {
         float asideX = width / 2.0F;
         float asideY = height - 24.0F;
-        if (panelTop != NO_PANEL && panelWidth > 0 && showsInventory()) {
+        if (keepsHotbar()) {
+            asideX = width / 2.0F + 106.0F;
+            asideY = height - 34.0F;
+        } else if (panelTop != NO_PANEL && panelWidth > 0 && showsInventory()) {
             asideX = panelLeft + panelWidth + 14.0F;
             asideY = panelTop + panelHeight / 2.0F;
         }
@@ -169,6 +182,28 @@ public final class FocusScreen extends Screen {
         }
         return station != null && station.type().schema().hasItems() && FocusController.get().options().inventoryPanel()
                 && (station.scene() == null || station.scene().inventoryLayout() == null);
+    }
+
+    /** The stack under the cursor: an inventory slot's, a station slot's, an output's; empty elsewhere. */
+    public static ItemStack hoveredStack() {
+        LocalPlayer player = Minecraft.getInstance().player;
+        ClientStation station = FocusController.get().station();
+        if (player == null || station == null || !(Minecraft.getInstance().screen instanceof FocusScreen)) {
+            return ItemStack.EMPTY;
+        }
+        FocusInput input = FocusInput.get();
+        int slot = input.hoveredInventorySlot();
+        if (slot >= 0) {
+            return player.getInventory().getItem(slot);
+        }
+        NodeInstance node = input.hovered();
+        return node == null ? ItemStack.EMPTY : itemOf(station, node.definition());
+    }
+
+    /** Whether the drawer keeps the hotbar in place and builds on it ({@code layout: hotbar}). */
+    private static boolean keepsHotbar() {
+        InventoryDrawer drawer = drawer();
+        return drawer != null && drawer.keepsHotbar() && Minecraft.getInstance().player != null;
     }
 
     /** The scene's inventory drawer, or null. */
@@ -324,7 +359,7 @@ public final class FocusScreen extends Screen {
         }
         Inventory inventory = player.getInventory();
         java.util.function.Predicate<ItemStack> filter = station.inventoryFilter();
-        boolean carrying = FocusInput.get().carried() != null || !player.inventoryMenu.getCarried().isEmpty();
+        boolean carrying = FocusInput.get().carried() != null || !player.containerMenu.getCarried().isEmpty();
         if (!carrying && isOverWorld(mouseX, mouseY)) {
             compactSlots.removeIf(slot -> inventory.getItem(slot).isEmpty() || !filter.test(inventory.getItem(slot)));
         }
@@ -370,11 +405,17 @@ public final class FocusScreen extends Screen {
     }
 
     private void renderScreen(GuiGraphics graphics, int mouseX, int mouseY) {
-        pickCompact(mouseX, mouseY);
-        layout();
         InventoryDrawer drawer = drawer();
-        if (drawer != null) {
-            updateDrawer(drawer, mouseX, mouseY);
+        if (keepsHotbar()) {
+            HotbarLayout.update(FocusController.get().station(), Minecraft.getInstance().player.getInventory());
+            panelLeft = NO_PANEL;
+            panelTop = NO_PANEL;
+        } else {
+            pickCompact(mouseX, mouseY);
+            layout();
+            if (drawer != null) {
+                updateDrawer(drawer, mouseX, mouseY);
+            }
         }
         FocusInput input = FocusInput.get();
         int hoveredSlot = slotAt(mouseX, mouseY);
@@ -404,7 +445,9 @@ public final class FocusScreen extends Screen {
                 graphics.pose().pushPose();
                 graphics.pose().translate(0.0F, 0.0F, 232.0F);
                 graphics.renderItem(carried.stack(), mouseX - 8, mouseY - 8);
-                graphics.renderItemDecorations(font, carried.stack(), mouseX - 8, mouseY - 8);
+                int left = input.spreadLeft();
+                graphics.renderItemDecorations(font, carried.stack(), mouseX - 8, mouseY - 8,
+                        left >= 0 ? (left == 0 ? net.minecraft.ChatFormatting.YELLOW + "0" : String.valueOf(left)) : null);
                 graphics.pose().popPose();
             }
             return;
@@ -523,6 +566,11 @@ public final class FocusScreen extends Screen {
         // Over everything the world drew; the items' own depth stays above it.
         graphics.pose().pushPose();
         graphics.pose().translate(0.0F, 0.0F, 100.0F);
+        if (keepsHotbar()) {
+            HotbarLayout.render(graphics, font, FocusController.get().station(), inventory, hoveredSlot);
+            graphics.pose().popPose();
+            return;
+        }
         if (drawerOut() > 0.0F) {
             if (drawer.style() == InventoryDrawer.Style.MINIMAL || drawer.compact()) {
                 renderMinimal(graphics, drawer, inventory, hoveredSlot);
@@ -607,6 +655,10 @@ public final class FocusScreen extends Screen {
             int x = center[0] - 8;
             int y = center[1] - 8;
             ItemStack stack = inventory.getItem(slot);
+            ItemStack spread = FocusInput.get().spreadPreview(new Target.Inventory(slot));
+            if (!spread.isEmpty()) {
+                stack = spread;
+            }
             if (!stack.isEmpty()) {
                 // A stack that has just landed here bounces.
                 float scale = FocusInput.get().gains().slotScale(slot);
@@ -636,6 +688,9 @@ public final class FocusScreen extends Screen {
 
     /** The inventory slot at a GUI position; -2 over the panel but not on a slot; -1 outside the panel. */
     private static int slotAt(double mouseX, double mouseY) {
+        if (keepsHotbar()) {
+            return HotbarLayout.slotAt(FocusController.get().station(), Minecraft.getInstance().player.getInventory(), mouseX, mouseY);
+        }
         InventoryDrawer drawer = drawer();
         if (drawer != null && onTab(drawer, mouseX, mouseY)) {
             return -2;
@@ -675,6 +730,9 @@ public final class FocusScreen extends Screen {
         }
         if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT || button == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
             FocusInput.get().press(mouseX, mouseY, button, shift(), slotAt(mouseX, mouseY));
+        } else {
+            FocusInput.get().mouseMoved(mouseX, mouseY, slotAt(mouseX, mouseY));
+            FocusInput.get().menuPick(button);
         }
         return true;
     }
@@ -715,6 +773,9 @@ public final class FocusScreen extends Screen {
         }
         if (Minecraft.getInstance().options.keyInventory.matches(keyCode, scanCode)) {
             onClose();
+            return true;
+        }
+        if (FocusInput.get().menuKey(keyCode, scanCode, hasControlDown())) {
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_TAB && FocusInput.get().toggleInventory()) {

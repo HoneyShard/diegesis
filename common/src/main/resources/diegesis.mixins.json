@@ -8,6 +8,7 @@
   "client": [
     "client.CameraMixin",
     "client.ChatComponentMixin",
+    "client.ClientPacketListenerMixin",
     "client.GameRendererMixin",
     "client.GuiGraphicsMixin",
     "client.ItemInHandRendererMixin",

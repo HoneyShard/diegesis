@@ -194,8 +194,8 @@ public final class PlacedShape {
             minecraft.getBlockRenderer().getModelRenderer().renderModel(poseStack.last(), consumer, block, model, red, green, blue, packedLight,
                     OverlayTexture.NO_OVERLAY);
         } else {
-            minecraft.getItemRenderer().renderStatic(stack, ItemDisplayContext.FIXED, packedLight, OverlayTexture.NO_OVERLAY, poseStack, buffers,
-                    level, seed);
+            minecraft.getItemRenderer().renderStatic(stack, ItemDisplayContext.FIXED, packedLight, OverlayTexture.NO_OVERLAY, poseStack,
+                    com.pockyl.diegesis.impl.client.render.SceneRenderer.solidItems(buffers), level, seed);
         }
         poseStack.popPose();
     }

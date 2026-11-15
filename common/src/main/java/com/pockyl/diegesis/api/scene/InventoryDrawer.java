@@ -34,11 +34,18 @@ import java.util.Optional;
  * @param compact     only the stacks the station can use, packed in rows of up to nine and the drawer no bigger than them
  *                    ({@code StationView.setInventoryFilter}); with a stack on the cursor one empty slot to put it in. It
  *                    changes shape only while the cursor is away from it, so nothing moves under the hand
+ * @param carrySize   the size (pixels) of a stack taken from the drawer while it is carried over the scene: as big as the
+ *                    station's own items look. Without it the stack keeps the size of the last one carried
+ * @param layout      {@code rows}: the drawer as described above. {@code hotbar}: the hotbar stays where the HUD has it and takes
+ *                    clicks, the off hand beside it at a menu station; over it rows of the other stacks the station can use
+ *                    ({@code StationView.setInventoryFilter}), in the order they had when the station opened, with one empty
+ *                    slot always among them. Side, align, icon, style and compact do not apply to it
  */
 public record InventoryDrawer(Side side, float align, Item icon, Optional<ResourceLocation> iconTexture, float hoverZone, float openDelay,
-        float closeDelay, float slideTime, float margin, Style style, int background, int slotColor, boolean alwaysOpen, boolean compact) {
+        float closeDelay, float slideTime, float margin, Style style, int background, int slotColor, boolean alwaysOpen, boolean compact,
+        Optional<Float> carrySize, Layout layout) {
     public static final InventoryDrawer DEFAULT = new InventoryDrawer(Side.RIGHT, 0.5F, Items.BUNDLE, Optional.empty(), 10.0F, 0.08F, 0.35F,
-            0.18F, 4.0F, Style.PANEL, 0xC0101216, 0x66000000, false, false);
+            0.18F, 4.0F, Style.PANEL, 0xC0101216, 0x66000000, false, false, Optional.empty(), Layout.ROWS);
 
     public static final Codec<InventoryDrawer> CODEC = StrictCodecs.record(instance -> instance.group(
             StrictCodecs.optional(Side.CODEC, "side", DEFAULT.side).forGetter(InventoryDrawer::side),
@@ -54,8 +61,25 @@ public record InventoryDrawer(Side side, float align, Item icon, Optional<Resour
             StrictCodecs.optional(Visual.COLOR, "background", DEFAULT.background).forGetter(InventoryDrawer::background),
             StrictCodecs.optional(Visual.COLOR, "slot_color", DEFAULT.slotColor).forGetter(InventoryDrawer::slotColor),
             StrictCodecs.optional(Codec.BOOL, "always_open", DEFAULT.alwaysOpen).forGetter(InventoryDrawer::alwaysOpen),
-            StrictCodecs.optional(Codec.BOOL, "compact", DEFAULT.compact).forGetter(InventoryDrawer::compact)
+            StrictCodecs.optional(Codec.BOOL, "compact", DEFAULT.compact).forGetter(InventoryDrawer::compact),
+            StrictCodecs.optional(Codec.floatRange(1.0F, 64.0F), "carry_size").forGetter(InventoryDrawer::carrySize),
+            StrictCodecs.optional(Layout.CODEC, "layout", DEFAULT.layout).forGetter(InventoryDrawer::layout)
     ).apply(instance, InventoryDrawer::new));
+
+    /** A drawer laid out in rows, as before there were layouts. */
+    public InventoryDrawer(Side side, float align, Item icon, Optional<ResourceLocation> iconTexture, float hoverZone, float openDelay,
+            float closeDelay, float slideTime, float margin, Style style, int background, int slotColor, boolean alwaysOpen, boolean compact,
+            Optional<Float> carrySize) {
+        this(side, align, icon, iconTexture, hoverZone, openDelay, closeDelay, slideTime, margin, style, background, slotColor, alwaysOpen,
+                compact, carrySize, Layout.ROWS);
+    }
+
+    /** A drawer whose stacks keep the size of the last one carried. */
+    public InventoryDrawer(Side side, float align, Item icon, Optional<ResourceLocation> iconTexture, float hoverZone, float openDelay,
+            float closeDelay, float slideTime, float margin, Style style, int background, int slotColor, boolean alwaysOpen, boolean compact) {
+        this(side, align, icon, iconTexture, hoverZone, openDelay, closeDelay, slideTime, margin, style, background, slotColor, alwaysOpen,
+                compact, Optional.empty(), Layout.ROWS);
+    }
 
     /** The default drawer at {@code side}, for scenes built in code. */
     public static InventoryDrawer at(Side side) {
@@ -64,30 +88,47 @@ public record InventoryDrawer(Side side, float align, Item icon, Optional<Resour
 
     public InventoryDrawer withSide(Side value) {
         return new InventoryDrawer(value, align, icon, iconTexture, hoverZone, openDelay, closeDelay, slideTime, margin, style, background,
-                slotColor, alwaysOpen, compact);
+                slotColor, alwaysOpen, compact, carrySize, layout);
     }
 
     /** The same drawer with another item on its icon. */
     public InventoryDrawer withIcon(Item value) {
         return new InventoryDrawer(side, align, value, Optional.empty(), hoverZone, openDelay, closeDelay, slideTime, margin, style, background,
-                slotColor, alwaysOpen, compact);
+                slotColor, alwaysOpen, compact, carrySize, layout);
     }
 
     /** The same drawer with a 16x16 texture on its icon. */
     public InventoryDrawer withIconTexture(ResourceLocation value) {
         return new InventoryDrawer(side, align, icon, Optional.of(value), hoverZone, openDelay, closeDelay, slideTime, margin, style, background,
-                slotColor, alwaysOpen, compact);
+                slotColor, alwaysOpen, compact, carrySize, layout);
     }
 
     public InventoryDrawer withStyle(Style value) {
         return new InventoryDrawer(side, align, icon, iconTexture, hoverZone, openDelay, closeDelay, slideTime, margin, value, background,
-                slotColor, alwaysOpen, compact);
+                slotColor, alwaysOpen, compact, carrySize, layout);
     }
 
     /** The same drawer showing only the stacks the station can use. */
     public InventoryDrawer withCompact(boolean value) {
         return new InventoryDrawer(side, align, icon, iconTexture, hoverZone, openDelay, closeDelay, slideTime, margin, style, background,
-                slotColor, alwaysOpen, value);
+                slotColor, alwaysOpen, value, carrySize, layout);
+    }
+
+    /** The same drawer carrying its stacks over the scene at this size (pixels). */
+    public InventoryDrawer withCarrySize(float value) {
+        return new InventoryDrawer(side, align, icon, iconTexture, hoverZone, openDelay, closeDelay, slideTime, margin, style, background,
+                slotColor, alwaysOpen, compact, Optional.of(value), layout);
+    }
+
+    /** The same drawer laid out another way. */
+    public InventoryDrawer withLayout(Layout value) {
+        return new InventoryDrawer(side, align, icon, iconTexture, hoverZone, openDelay, closeDelay, slideTime, margin, style, background,
+                slotColor, alwaysOpen, compact, carrySize, value);
+    }
+
+    /** Whether the hotbar stays in place and the drawer builds on it. */
+    public boolean keepsHotbar() {
+        return layout == Layout.HOTBAR;
     }
 
     /** A side of the screen. */
@@ -108,6 +149,27 @@ public record InventoryDrawer(Side side, float align, Item icon, Optional<Resour
         /** Whether the drawer slides sideways. */
         public boolean isHorizontal() {
             return this == LEFT || this == RIGHT;
+        }
+
+        @Override
+        public String getSerializedName() {
+            return name;
+        }
+    }
+
+    /** How the drawer lays the inventory out. */
+    public enum Layout implements StringRepresentable {
+        /** Rows at a side of the screen. */
+        ROWS("rows"),
+        /** The hotbar where the HUD has it, the stacks the station can use over it. */
+        HOTBAR("hotbar");
+
+        public static final Codec<Layout> CODEC = StringRepresentable.fromEnum(Layout::values);
+
+        private final String name;
+
+        Layout(String name) {
+            this.name = name;
         }
 
         @Override

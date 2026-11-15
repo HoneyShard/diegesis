@@ -54,6 +54,7 @@ public final class StationType {
     private final List<Seat> seats;
     private final boolean hidesBlock;
     private final boolean idleLogic;
+    private final MenuBinding menu;
 
     private StationType(Builder builder) {
         this.id = builder.id;
@@ -73,6 +74,12 @@ public final class StationType {
         this.seats = List.copyOf(builder.seats);
         this.hidesBlock = builder.hidesBlock;
         this.idleLogic = builder.idleLogic;
+        this.menu = builder.menu;
+    }
+
+    /** The vanilla menu a {@link Authority#MENU} station works through, or null. */
+    public MenuBinding menuBinding() {
+        return menu;
     }
 
     /** Whether the scene stands in for the block's own model while the station is in use. */
@@ -282,6 +289,7 @@ public final class StationType {
         private double reach = 6.0;
         private boolean shared = true;
         private final List<Seat> seats = new java.util.ArrayList<>();
+        private MenuBinding menu;
 
         private Builder(ResourceLocation id) {
             this.id = Objects.requireNonNull(id);
@@ -323,6 +331,17 @@ public final class StationType {
         /** {@link Authority#SERVER} by default. */
         public Builder authority(Authority value) {
             authority = value;
+            return this;
+        }
+
+        /**
+         * The station works through the block's own vanilla menu ({@link Authority#MENU}): the use goes to the server as in
+         * vanilla, the menu it opens is taken without its screen, and the station's slots and outputs show the menu slots the
+         * binding names. Works on any server. Register such a station from the client entry point.
+         */
+        public Builder menu(MenuBinding binding) {
+            menu = Objects.requireNonNull(binding);
+            authority = Authority.MENU;
             return this;
         }
 
@@ -409,7 +428,30 @@ public final class StationType {
                 throw new IllegalStateException("Station " + id + " is client-only but has slots or outputs: items can only move"
                         + " between a player and a station through the server");
             }
+            if (authority == Authority.MENU) {
+                checkMenu();
+            } else if (menu != null) {
+                throw new IllegalStateException("Station " + id + " has a menu binding but authority " + authority);
+            }
             return new StationType(this);
+        }
+
+        private void checkMenu() {
+            if (menu == null) {
+                throw new IllegalStateException("Station " + id + " has authority MENU but no menu binding: use menu(..)");
+            }
+            schema.slotGroups().forEach((name, group) -> {
+                MenuBinding.SlotRange range = menu.slots().get(name);
+                if (range == null || range.count() != group.size()) {
+                    throw new IllegalStateException("Station " + id + ": slot group " + name + " has " + group.size()
+                            + " slots, its menu binding " + (range == null ? "none" : range.count()));
+                }
+            });
+            for (String output : schema.outputs()) {
+                if (!menu.outputs().containsKey(output)) {
+                    throw new IllegalStateException("Station " + id + ": output " + output + " has no menu slot");
+                }
+            }
         }
 
         /** Builds the station and registers it with {@link Diegesis#register}. */
