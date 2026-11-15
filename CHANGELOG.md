@@ -4,7 +4,7 @@ All notable changes to this mod are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0-beta.10+1.20.1] - Unreleased
 ### Added
 - Node option `takes_items`: while a stack is on the cursor the node is hovered too and its click goes to `onItemClick`, for
   places a station lays things on by code.
@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Camera option `interactive_at`: clicks count from that share of the flight in (default 1: once the camera has arrived).
 
 ### Fixed
+- With InvMove, the keys that go over to a neighbouring station also walked the player away from it:
+  the player stands still while working at a station.
 - Items in a scene keep their depth when tipped: a bucket being poured, or anything leaning, no longer shows dark lines
   across its face where its one-pixel sides were drawn over it.
 - The shadow of a carried item is even: it no longer shows darker stripes and bands where the item's front and back overlapped.
@@ -50,6 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - With a shader pack, things standing in the camera's way cast their whole shadow.
 - Where a graphics driver refuses the targets smooth painters are drawn into, they are still drawn over the finished frame,
   only without smoothing; before, they went back into the scene, where a block beside the station could cover them.
+- A station whose open check fails no longer crashes the game when its block is used: the block keeps its own use and
+  the error is logged once.
 
 ## [1.0.0-beta.9+1.20.1] - 2026-11-14
 ### Added
