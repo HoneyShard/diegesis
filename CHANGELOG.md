@@ -4,7 +4,7 @@ All notable changes to this mod are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0-beta.10+1.20.1] - Unreleased
+## [1.0.0-beta.10+1.20.1] - 2026-11-15
 ### Added
 - Node option `takes_items`: while a stack is on the cursor the node is hovered too and its click goes to `onItemClick`, for
   places a station lays things on by code.
