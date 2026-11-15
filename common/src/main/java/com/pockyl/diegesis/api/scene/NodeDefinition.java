@@ -40,6 +40,9 @@ import java.util.regex.Pattern;
  * @param dropZone  the name of a slot group: a stack clicked or let go on the node goes into that group, merging with what
  *                  is there or into the first empty slot, as into the mouth of a pot. The cursor passes through while the hand
  *                  is empty or nothing fits, so the slots behind it stay reachable
+ * @param takesItems while a stack is on the cursor the node is hovered and clicked like an empty-handed one, and the click goes
+ *                  to the behaviour's {@code onItemClick}: places the station lays things on by code (no slot of its own) show
+ *                  under the stack where it would go. Without it a carried stack sees only slots and drop zones
  * @param tooltip   text shown next to the cursor while it is over the node: a translation key (shown as written when
  *                  no language has it); code can change it ({@code NodeView.setTooltip}). A node with a tooltip and a
  *                  hit box can be hovered even when it does nothing else
@@ -55,7 +58,7 @@ import java.util.regex.Pattern;
  * @param children  nodes attached to this one
  */
 public record NodeDefinition(String id, Transform transform, Optional<Visual> visual, Optional<Box> collider, boolean trigger,
-        boolean pickable, boolean precise, boolean strokes, Optional<String> dropZone, Optional<String> tooltip, Optional<Grabbable> grabbable, Optional<SlotBinding> slot, Optional<OutputBinding> output, Optional<ControlBinding> control,
+        boolean pickable, boolean precise, boolean strokes, Optional<String> dropZone, boolean takesItems, Optional<String> tooltip, Optional<Grabbable> grabbable, Optional<SlotBinding> slot, Optional<OutputBinding> output, Optional<ControlBinding> control,
         Optional<TankBinding> tank, Optional<EmitterDefinition> emitter, Optional<LightDefinition> light, boolean hidden,
         JsonObject extra, List<NodeDefinition> children) {
     private static final Pattern ID = Pattern.compile("[a-z0-9_]+");
@@ -68,7 +71,7 @@ public record NodeDefinition(String id, Transform transform, Optional<Visual> vi
 
     /** The node's switches, read as one part of the node object (a record codec takes at most 16 fields). */
     private record Flags(boolean trigger, boolean pickable, boolean precise, boolean strokes, boolean hidden, Optional<String> tooltip,
-            Optional<String> dropZone) {
+            Optional<String> dropZone, boolean takesItems) {
         static final MapCodec<Flags> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
                 StrictCodecs.optional(Codec.BOOL, "trigger", false).forGetter(Flags::trigger),
                 StrictCodecs.optional(Codec.BOOL, "pickable", true).forGetter(Flags::pickable),
@@ -76,7 +79,8 @@ public record NodeDefinition(String id, Transform transform, Optional<Visual> vi
                 StrictCodecs.optional(Codec.BOOL, "strokes", false).forGetter(Flags::strokes),
                 StrictCodecs.optional(Codec.BOOL, "hidden", false).forGetter(Flags::hidden),
                 StrictCodecs.optional(Codec.STRING, "tooltip").forGetter(Flags::tooltip),
-                StrictCodecs.optional(Codec.STRING, "drop_zone").forGetter(Flags::dropZone)
+                StrictCodecs.optional(Codec.STRING, "drop_zone").forGetter(Flags::dropZone),
+                StrictCodecs.optional(Codec.BOOL, "takes_items", false).forGetter(Flags::takesItems)
         ).apply(instance, Flags::new));
     }
 
@@ -85,7 +89,8 @@ public record NodeDefinition(String id, Transform transform, Optional<Visual> vi
             Transform.MAP_CODEC.forGetter(NodeDefinition::transform),
             StrictCodecs.optional(Visual.CODEC, "visual").forGetter(NodeDefinition::visual),
             StrictCodecs.optional(Box.CODEC, "collider").forGetter(NodeDefinition::collider),
-            Flags.MAP_CODEC.forGetter(node -> new Flags(node.trigger, node.pickable, node.precise, node.strokes, node.hidden, node.tooltip, node.dropZone)),
+            Flags.MAP_CODEC.forGetter(node -> new Flags(node.trigger, node.pickable, node.precise, node.strokes, node.hidden, node.tooltip, node.dropZone,
+                    node.takesItems)),
             StrictCodecs.optional(Grabbable.CODEC, "grabbable").forGetter(NodeDefinition::grabbable),
             StrictCodecs.optional(SlotBinding.CODEC, "slot").forGetter(NodeDefinition::slot),
             StrictCodecs.optional(OutputBinding.CODEC, "output").forGetter(NodeDefinition::output),
@@ -96,7 +101,7 @@ public record NodeDefinition(String id, Transform transform, Optional<Visual> vi
             StrictCodecs.optional(JSON_OBJECT, "extra", new JsonObject()).forGetter(NodeDefinition::extra),
             StrictCodecs.optional(NodeDefinition.CODEC.listOf(), "children", List.of()).forGetter(NodeDefinition::children)
     ).apply(instance, (id, transform, visual, collider, flags, grabbable, slot, output, control, tank, emitter, light, extra, children) ->
-            new NodeDefinition(id, transform, visual, collider, flags.trigger, flags.pickable, flags.precise, flags.strokes, flags.dropZone, flags.tooltip, grabbable, slot, output,
+            new NodeDefinition(id, transform, visual, collider, flags.trigger, flags.pickable, flags.precise, flags.strokes, flags.dropZone, flags.takesItems, flags.tooltip, grabbable, slot, output,
                     control, tank, emitter, light, flags.hidden, extra, children))).comapFlatMap(NodeDefinition::validate, node -> node));
 
     public NodeDefinition {
@@ -152,6 +157,7 @@ public record NodeDefinition(String id, Transform transform, Optional<Visual> vi
         private boolean precise;
         private boolean strokes;
         private String dropZone;
+        private boolean takesItems;
         private String tooltip;
         private boolean hidden;
         private JsonObject extra = new JsonObject();
@@ -235,6 +241,12 @@ public record NodeDefinition(String id, Transform transform, Optional<Visual> vi
             return this;
         }
 
+        /** A carried stack hovers and clicks the node too, see {@link NodeDefinition#takesItems}. */
+        public Builder takesItems() {
+            takesItems = true;
+            return this;
+        }
+
         /** The collider is a trigger zone for carried objects only; the cursor passes through it. */
         public Builder trigger() {
             trigger = true;
@@ -270,7 +282,7 @@ public record NodeDefinition(String id, Transform transform, Optional<Visual> vi
 
         public NodeDefinition build() {
             NodeDefinition node = new NodeDefinition(id, transform, Optional.ofNullable(visual), Optional.ofNullable(collider), trigger,
-                    pickable, precise, strokes, Optional.ofNullable(dropZone), Optional.ofNullable(tooltip), Optional.ofNullable(grabbable), Optional.ofNullable(slot), Optional.ofNullable(output), Optional.ofNullable(control),
+                    pickable, precise, strokes, Optional.ofNullable(dropZone), takesItems, Optional.ofNullable(tooltip), Optional.ofNullable(grabbable), Optional.ofNullable(slot), Optional.ofNullable(output), Optional.ofNullable(control),
                     Optional.ofNullable(tank), Optional.ofNullable(emitter), Optional.ofNullable(light), hidden, extra, children);
             return validate(node).getOrThrow(false, error -> {
             });

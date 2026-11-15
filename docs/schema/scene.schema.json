@@ -795,6 +795,11 @@
             "type": "string",
             "description": "A slot group: a stack clicked or let go here goes into that group. The cursor passes through while nothing fits."
           },
+          "takes_items": {
+            "type": "boolean",
+            "default": false,
+            "description": "While a stack is on the cursor the node is hovered and its click goes to onItemClick, for places a station lays things on by code."
+          },
           "output": {
             "$ref": "#/definitions/output",
             "description": "The node shows a station output; clicking takes it."
@@ -3070,6 +3075,19 @@
           ],
           "description": "A slot group: a stack clicked or let go here goes into that group. The cursor passes through while nothing fits."
         },
+        "takes_items": {
+          "anyOf": [
+            {
+              "type": "boolean",
+              "default": false,
+              "description": "While a stack is on the cursor the node is hovered and its click goes to onItemClick, for places a station lays things on by code."
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "While a stack is on the cursor the node is hovered and its click goes to onItemClick, for places a station lays things on by code."
+        },
         "output": {
           "anyOf": [
             {
@@ -5024,6 +5042,11 @@
         "drop_zone": {
           "type": "string",
           "description": "A slot group: a stack clicked or let go here goes into that group. The cursor passes through while nothing fits."
+        },
+        "takes_items": {
+          "type": "boolean",
+          "default": false,
+          "description": "While a stack is on the cursor the node is hovered and its click goes to onItemClick, for places a station lays things on by code."
         },
         "output": {
           "$ref": "#/definitions/output",

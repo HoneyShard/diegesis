@@ -715,6 +715,9 @@ public final class FocusInput {
         if (station == null || gesture != null || hoveredInventory != -1) {
             return;
         }
+        if (station.scroll(hovered != null ? hovered.id() : null, amount)) {
+            return;
+        }
         if (scrollOnPlacing(station, amount)) {
             return;
         }
@@ -794,7 +797,8 @@ public final class FocusInput {
         boolean carrying = !carriedStack().isEmpty();
         if (gesture == null || gesture instanceof NodeGrab) {
             Predicate<NodeInstance> filter = carrying
-                    ? candidate -> isFixedSlot(candidate) || candidate.definition().dropZone().isPresent() && isClickable(candidate) : this::isClickable;
+                    ? candidate -> isFixedSlot(candidate) || (candidate.definition().dropZone().isPresent() || candidate.definition().takesItems())
+                            && isClickable(candidate) : this::isClickable;
             Picked picked = hoveredInventory != -1 ? Picked.NONE : pickAll(station, filter);
             sceneInventory = picked.inventorySlot();
             setHovered(picked.node());

@@ -55,6 +55,14 @@ public interface NodeView {
     void setOutlined(boolean outlined);
 
     /**
+     * Outlines only the part of the node the player sees, never what other things in front of it hide: one of a stack of
+     * baskets shows as its own band, not as its whole shape through the ones over it. Off by default: the outline is the node's
+     * whole silhouette, as a glowing entity's. Under a shader pack the whole silhouette stays.
+     */
+    default void setOutlineSeenOnly(boolean seenOnly) {
+    }
+
+    /**
      * Draws the node's own visual and shape over everything else while the local player works at the station, smooth like a
      * {@link NodePainter#smooth()} painter: a badge beside an object that the block itself or a neighbour must never hide. For
      * everybody else it is drawn with the scene as before.

@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Node option `takes_items`: while a stack is on the cursor the node is hovered too and its click goes to `onItemClick`, for
+  places a station lays things on by code.
+- `StationBehavior.onScroll(view, node, amount)`: the mouse wheel over the scene goes to the station's code first.
+- `StationView.moveCamera(x, y, z)`: code moves the station's whole camera, which glides there, for work at another height.
+- `StationType.Builder.hidesBlocks(Span)`: a multiblock station hides its other blocks with the main one while it is
+  in use, so its scene can lift a tower apart.
+- `NodeView.setOutlineSeenOnly(true)`: the hover outline goes round the part of the node the player sees, not its whole
+  shape through what stands in front of it (one basket of a stack). Under a shader pack the whole shape stays outlined.
 - Menu stations (`StationType.Builder.menu(MenuBinding)`, `Authority.MENU`): a station that works through the block's own
   vanilla menu, opened on the server by the block's normal use and never shown. Its slots show the menu's slots and every
   click is the one the vanilla screen sends, so it moves items on any server, with or without Diegesis there.

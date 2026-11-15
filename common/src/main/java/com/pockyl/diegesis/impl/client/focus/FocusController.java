@@ -59,6 +59,8 @@ public final class FocusController {
     /** Where the camera's base shot is now: the seat's, or the rig's; glides when the server gives another seat. */
     private final Vector3f basePosition = new Vector3f();
     private final Vector3f baseTarget = new Vector3f();
+    /** The station's {@code moveCamera}, glided to. */
+    private final Vector3f move = new Vector3f();
     /** Where the camera flies from while going over to a neighbour, and its field of view there; null otherwise. */
     private CameraPose flightFrom;
     private double flightFromFov;
@@ -223,6 +225,7 @@ public final class FocusController {
         CameraShot seat = seatShot(rig);
         basePosition.set(seat != null ? seat.position() : rig.position());
         baseTarget.set(seat != null ? seat.target() : rig.target());
+        move.set(station == null ? new Vector3f() : station.cameraMove());
     }
 
     /** The view from the local player's seat, or null. */
@@ -358,6 +361,9 @@ public final class FocusController {
         float settle = 1.0F - (float) Math.exp(-dt * SEAT_GLIDE);
         basePosition.lerp(seat != null ? seat.position() : currentRig.position(), settle);
         baseTarget.lerp(seat != null ? seat.target() : currentRig.target(), settle);
+        if (station != null) {
+            move.lerp(station.cameraMove(), settle);
+        }
         float duration = Math.max(flightFrom != null ? flightTime : currentRig.transition(), 0.01F);
         Minecraft minecraft = Minecraft.getInstance();
         if (phase == Phase.ENTERING) {
@@ -411,7 +417,7 @@ public final class FocusController {
 
     /** What the camera looks at, in the station's pixels. */
     public org.joml.Vector3fc baseTarget() {
-        return baseTarget;
+        return new Vector3f(baseTarget).add(move);
     }
 
     /**
@@ -525,6 +531,8 @@ public final class FocusController {
             position.lerp(look.shot().position(), look.amount());
             target.lerp(look.shot().target(), look.amount());
         }
+        position.add(move);
+        target.add(move);
         Vec3 rigPos = station.toWorld(position.x(), position.y(), position.z());
         Vec3 rigTarget = station.toWorld(target.x(), target.y(), target.z());
         Vec3 dir = rigTarget.subtract(rigPos);

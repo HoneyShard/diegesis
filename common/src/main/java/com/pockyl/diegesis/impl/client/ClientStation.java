@@ -69,6 +69,7 @@ public final class ClientStation implements StationView, StationContext {
     private final BlockPos pos;
     private Direction facing;
     private final StationState state;
+    private final org.joml.Vector3f cameraMove = new org.joml.Vector3f();
     private final boolean hostState;
     private final StationLogic logic;
     /** The logic's copy on this client, for what the block shows while nobody works at it ({@code idleLogic}). */
@@ -411,6 +412,16 @@ public final class ClientStation implements StationView, StationContext {
     }
 
     @Override
+    public void moveCamera(float x, float y, float z) {
+        cameraMove.set(x, y, z);
+    }
+
+    @Override
+    public org.joml.Vector3fc cameraMove() {
+        return cameraMove;
+    }
+
+    @Override
     public void glanceBack() {
         if (focused) {
             FocusInput.get().glanceBack();
@@ -712,6 +723,16 @@ public final class ClientStation implements StationView, StationContext {
     public boolean inventoryShiftClick(int slot, ItemStack stack) {
         try {
             return behavior.onInventoryShiftClick(this, slot, stack);
+        } catch (RuntimeException e) {
+            DiegesisMod.LOGGER.error("Client code of station {} at {} failed", type.id(), pos, e);
+            return false;
+        }
+    }
+
+    /** Offers a turn of the mouse wheel over the scene to the behaviour; true when it took it. */
+    public boolean scroll(String node, double amount) {
+        try {
+            return behavior.onScroll(this, node, amount);
         } catch (RuntimeException e) {
             DiegesisMod.LOGGER.error("Client code of station {} at {} failed", type.id(), pos, e);
             return false;

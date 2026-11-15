@@ -1,6 +1,7 @@
 package com.pockyl.diegesis.impl.client.render;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultedVertexConsumer;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -36,6 +37,7 @@ import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
+import org.lwjgl.opengl.GL11;
 
 import com.pockyl.diegesis.DiegesisMod;
 import com.pockyl.diegesis.api.client.NodePainter;
@@ -110,6 +112,8 @@ public final class SceneRenderer {
     private static final List<Count> PENDING_COUNTS = new ArrayList<>();
     /** What gets an outline this frame (the usable object under the cursor), drawn once the scene is done. */
     private static final List<Consumer<MultiBufferSource>> PENDING_OUTLINES = new ArrayList<>();
+    /** Outlines of nodes that show only what is seen of them ({@code NodeView.setOutlineSeenOnly}): drawn against the depth. */
+    private static final List<Consumer<MultiBufferSource>> PENDING_SEEN_OUTLINES = new ArrayList<>();
     private static int outlineColor = 0xFFFFFF;
     /** Thickness of the board under a laid-out inventory, in pixels. */
     private static final float BOARD_THICKNESS = 1.0F;
@@ -214,11 +218,12 @@ public final class SceneRenderer {
         clearBuffers.endBatch();
         sceneBuffers.endBatch();
         flushCounts(sceneBuffers);
-        if (!PENDING_OUTLINES.isEmpty()) {
+        if (!PENDING_OUTLINES.isEmpty() || !PENDING_SEEN_OUTLINES.isEmpty()) {
             try {
                 drawOutlines(minecraft);
             } finally {
                 PENDING_OUTLINES.clear();
+                PENDING_SEEN_OUTLINES.clear();
             }
         }
     }
@@ -246,6 +251,21 @@ public final class SceneRenderer {
         }
         outline.endOutlineBatch();
         sceneBuffers.endBatch();
+        if (!PENDING_SEEN_OUTLINES.isEmpty()) {
+            // What is seen only: the frame's depth into the outline target, and the silhouette tested against it, so that what
+            // stands in front of the node cuts its silhouette. A shader pack draws the frame elsewhere: the whole silhouette then.
+            boolean tested = !ShaderShadows.packInUse();
+            if (tested) {
+                levelRenderer.entityTarget().copyDepthFrom(minecraft.getMainRenderTarget());
+                RenderSystem.enableDepthTest();
+                RenderSystem.depthFunc(GL11.GL_LEQUAL);
+            }
+            for (Consumer<MultiBufferSource> draw : PENDING_SEEN_OUTLINES) {
+                draw.accept(silhouettes);
+            }
+            outline.endOutlineBatch();
+            sceneBuffers.endBatch();
+        }
         effect.process(minecraft.getFrameTime());
         minecraft.getMainRenderTarget().bindWrite(false);
     }
@@ -323,12 +343,13 @@ public final class SceneRenderer {
             if (pointedAt || local && ui.hoverOutline() && (input.pourTarget() == node || node.isOutlined())) {
                 outlineColor = ui.outlineColor();
                 PoseStack at = snapshot(poseStack);
-                node.visual().ifPresent(visual -> PENDING_OUTLINES.add(target -> renderVisual(visual, 0xFFFFFFFF, at, target,
+                List<Consumer<MultiBufferSource>> pending = node.isOutlineSeenOnly() ? PENDING_SEEN_OUTLINES : PENDING_OUTLINES;
+                node.visual().ifPresent(visual -> pending.add(target -> renderVisual(visual, 0xFFFFFFFF, at, target,
                         LightTexture.FULL_BRIGHT, level)));
-                definition.slot().ifPresent(slot -> PENDING_OUTLINES.add(target -> renderSlotItem(station.state().getItem(slot.slot()),
+                definition.slot().ifPresent(slot -> pending.add(target -> renderSlotItem(station.state().getItem(slot.slot()),
                         slot.display(), slot.shownItemSize(), slot.slot().index(), station.age(), at, target, LightTexture.FULL_BRIGHT,
                         level)));
-                definition.output().ifPresent(output -> PENDING_OUTLINES.add(target -> renderSlotItem(
+                definition.output().ifPresent(output -> pending.add(target -> renderSlotItem(
                         station.state().getOutput(output.output()), output.display(), output.size(), 0, station.age(), at, target,
                         LightTexture.FULL_BRIGHT, level)));
             }

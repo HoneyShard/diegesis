@@ -164,6 +164,7 @@ extras (tank, emitter, light). Children move, turn and scale with their parent -
 | `trigger` | `false` | The collider is only a zone carried objects touch (`SceneEvent.Contact`); the cursor passes through it. |
 | `pickable` | `true` | `false`: pure decoration with no hit box at all - the cursor and carried objects pass through it (a gauge needle, a coloured band drawn on a grabbable parent). Not allowed together with a role or `trigger`. |
 | `drop_zone` | none | The name of a slot group: a stack clicked or let go on the node goes into it, merging with what is there or into the first empty slot, as into the mouth of a pot. The cursor passes through while the hand is empty or nothing fits, so slots behind it stay reachable. Needs a `collider`, no role. |
+| `takes_items` | `false` | While a stack is on the cursor the node is hovered and clicked as with an empty hand, and the click goes to the behaviour's `onItemClick`: places a station lays things on by code show under the stack where it would go. Without it a carried stack sees only slots and drop zones. |
 | `tooltip` | none | Text next to the cursor while it is over the node: a translation key (shown as written when no language has it). Line breaks (`
 `) start new lines. Code changes it with `NodeView.setTooltip(Component)` (a gauge reading, what a vessel holds). A node with a tooltip can be hovered even when it does nothing else. |
 | `grabbable` | none | Role: an object the player carries. |
