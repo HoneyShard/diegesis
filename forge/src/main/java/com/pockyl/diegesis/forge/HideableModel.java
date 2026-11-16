@@ -27,7 +27,12 @@ final class HideableModel extends BakedModelWrapper<BakedModel> {
     @Override
     public ModelData getModelData(BlockAndTintGetter level, BlockPos pos, BlockState state, ModelData data) {
         ModelData own = super.getModelData(level, pos, state, data);
-        return HiddenBlocks.isHidden(pos) ? own.derive().with(HIDDEN, true).build() : own;
+        if (HiddenBlocks.isHidden(pos)) {
+            return own.derive().with(HIDDEN, true).build();
+        }
+        // Asked as the chunk is built: the block's own model is in it again.
+        HiddenBlocks.built(pos);
+        return own;
     }
 
     @Override

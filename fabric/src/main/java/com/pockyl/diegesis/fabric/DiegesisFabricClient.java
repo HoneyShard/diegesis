@@ -45,6 +45,7 @@ public final class DiegesisFabricClient implements ClientModInitializer {
         HudRenderCallback.EVENT.register(beforeHud, (graphics, partialTick) -> HudSlide.begin("fabric:hud", graphics));
         HudRenderCallback.EVENT.register(afterHud, (graphics, partialTick) -> HudSlide.end(graphics));
         WorldRenderEvents.AFTER_ENTITIES.register(context -> SceneRenderer.render(context.matrixStack(), context.projectionMatrix(), context.camera()));
+        WorldRenderEvents.AFTER_TRANSLUCENT.register(context -> SceneRenderer.renderCounts());
         ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new SceneReloadListener());
         PreparableModelLoadingPlugin.register(
                 (ResourceManager manager, Executor executor) -> CompletableFuture.supplyAsync(() -> SceneLibrary.modelsToLoad(manager), executor),

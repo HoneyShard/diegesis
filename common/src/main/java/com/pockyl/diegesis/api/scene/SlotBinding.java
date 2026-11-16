@@ -48,7 +48,12 @@ public record SlotBinding(SlotRef slot, ItemDisplay display, float size, Optiona
         /** Lying on the slot, read from above. */
         UP("up"),
         /** Standing at the item's foot, facing the block's front. */
-        FRONT("front");
+        FRONT("front"),
+        /**
+         * At the item's foot, always turned to the camera, as a name tag is: reads whole from a camera that looks down at a slant,
+         * where a lying or standing number is squashed.
+         */
+        CAMERA("camera");
 
         public static final Codec<CountFacing> CODEC = StringRepresentable.fromEnum(CountFacing::values);
 

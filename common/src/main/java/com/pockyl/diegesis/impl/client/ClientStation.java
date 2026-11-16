@@ -70,6 +70,8 @@ public final class ClientStation implements StationView, StationContext {
     private Direction facing;
     private final StationState state;
     private final org.joml.Vector3f cameraMove = new org.joml.Vector3f();
+    /** The plane the camera is mirrored across ({@code mirrorCamera}), or NaN. */
+    private float cameraMirror = Float.NaN;
     private final boolean hostState;
     private final StationLogic logic;
     /** The logic's copy on this client, for what the block shows while nobody works at it ({@code idleLogic}). */
@@ -216,7 +218,7 @@ public final class ClientStation implements StationView, StationContext {
 
     @Override
     public boolean isBlockHidden() {
-        return type.hidesBlock() && HiddenBlocks.isHidden(pos);
+        return type.hidesBlock() && HiddenBlocks.isStoodIn(pos);
     }
 
     @Override
@@ -332,6 +334,32 @@ public final class ClientStation implements StationView, StationContext {
     }
 
     @Override
+    public void setPlacingVisible(boolean visible) {
+        if (scene != null) {
+            scene.setPlacingVisible(visible);
+        }
+    }
+
+    @Override
+    public boolean hasRoomFor(ItemStack stack) {
+        return scene != null && scene.hasRoomFor(stack);
+    }
+
+    @Override
+    public void setSurfaceVisible(int surface, boolean visible) {
+        if (scene != null) {
+            scene.setSurfaceVisible(surface, visible);
+        }
+    }
+
+    @Override
+    public void setSurfaceTransform(int surface, org.joml.Matrix4fc transform) {
+        if (scene != null) {
+            scene.setSurfaceTransform(surface, transform);
+        }
+    }
+
+    @Override
     public void setCarriedHidden(boolean hidden) {
         carriedHidden = hidden;
     }
@@ -419,6 +447,16 @@ public final class ClientStation implements StationView, StationContext {
     @Override
     public org.joml.Vector3fc cameraMove() {
         return cameraMove;
+    }
+
+    @Override
+    public void mirrorCamera(float plane) {
+        cameraMirror = plane;
+    }
+
+    @Override
+    public float cameraMirror() {
+        return cameraMirror;
     }
 
     @Override
@@ -723,6 +761,26 @@ public final class ClientStation implements StationView, StationContext {
     public boolean inventoryShiftClick(int slot, ItemStack stack) {
         try {
             return behavior.onInventoryShiftClick(this, slot, stack);
+        } catch (RuntimeException e) {
+            DiegesisMod.LOGGER.error("Client code of station {} at {} failed", type.id(), pos, e);
+            return false;
+        }
+    }
+
+    /** Offers a key going down to the behaviour, before the library's own keys; true when it took it. */
+    public boolean key(int keyCode, int scanCode, int modifiers) {
+        try {
+            return behavior.onKey(this, keyCode, scanCode, modifiers);
+        } catch (RuntimeException e) {
+            DiegesisMod.LOGGER.error("Client code of station {} at {} failed", type.id(), pos, e);
+            return false;
+        }
+    }
+
+    /** Offers a typed character to the behaviour; true when it took it. */
+    public boolean typed(char character, int modifiers) {
+        try {
+            return behavior.onChar(this, character, modifiers);
         } catch (RuntimeException e) {
             DiegesisMod.LOGGER.error("Client code of station {} at {} failed", type.id(), pos, e);
             return false;

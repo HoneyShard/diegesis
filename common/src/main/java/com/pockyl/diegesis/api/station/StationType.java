@@ -279,7 +279,12 @@ public final class StationType {
         /** Towards the player who opens the station. */
         PLAYER,
         /** Never turned: the scene as authored, front to the north. */
-        FIXED;
+        FIXED,
+        /**
+         * The block's facing property turned round; north when missing. For blocks whose facing names their back, such as
+         * furniture that takes the direction its placer looked in: the scene's front is then the block's front.
+         */
+        BLOCK_OPPOSITE;
 
         /** The facing for a use of the station by a player standing in {@code playerDirection} from it. */
         public Direction resolve(BlockState state, Direction towardsPlayer) {
@@ -289,6 +294,7 @@ public final class StationType {
                 case BLOCK -> fromBlock != null ? fromBlock : Direction.NORTH;
                 case PLAYER -> towardsPlayer;
                 case FIXED -> Direction.NORTH;
+                case BLOCK_OPPOSITE -> fromBlock != null ? fromBlock.getOpposite() : Direction.NORTH;
             };
         }
 

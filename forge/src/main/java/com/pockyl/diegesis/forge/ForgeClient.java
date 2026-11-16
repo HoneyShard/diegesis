@@ -103,6 +103,8 @@ final class ForgeClient {
         MinecraftForge.EVENT_BUS.addListener((RenderLevelStageEvent event) -> {
             if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_ENTITIES) {
                 SceneRenderer.render(event.getPoseStack(), event.getProjectionMatrix(), event.getCamera());
+            } else if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_PARTICLES) {
+                SceneRenderer.renderCounts();
             }
         });
     }

@@ -241,6 +241,9 @@ Shape where carried objects go. Each entry:
 
 Nothing in a scene is solid: without carry planes, a carried object passes through other objects at its lift height.
 
+The stack in the hand goes by the planes without `nodes` too: an upright station puts a plane with a `height` over its
+block, so the stack stays at its front instead of following the floor behind it.
+
 ### slot
 
 Shows the item of a station slot. It is clicked exactly like a vanilla container slot: left click picks up or puts
@@ -255,7 +258,7 @@ gathers, dragging over several slots spreads.
 | `item_size` | `size` | Size of the shown item when it differs. |
 | `counts` | `"always"` | When the stack's count is drawn: `always`, `hover` (slots close together stay readable), `never`. |
 | `highlight` | `true` | The square over the slot under the cursor. Off for things that are no slots to the eye, like food in a pot; the hover outline stays. |
-| `count_facing` | `"up"` | `up`: the count lies on the slot, read from above; `front`: it stands at the item's foot facing the block's front, for an item standing in a hollow the camera looks into (a furnace's mouth). |
+| `count_facing` | `"up"` | `up`: the count lies on the slot, read from above; `front`: it stands at the item's foot facing the block's front, for an item standing in a hollow the camera looks into (a furnace's mouth); `camera`: at the item's foot, always turned to the camera like a name tag. |
 
 A slot node needs no visual: it is an invisible pad on the surface. Put it where the block's texture shows a cell.
 
@@ -268,6 +271,7 @@ Shows a result the station logic computes (`state().setOutput`); clicking it cal
 | `output` | required | The output's name. |
 | `display` | `"floating"` | As for slots. |
 | `size` | `8` | Size of the item and of its click zone. |
+| `count_facing` | `"up"` | Which way the count faces: `up`, `front` or `camera`, as for a slot. |
 
 ### control
 
@@ -572,6 +576,10 @@ file has no node per item.
 | `shadows` | true | Items cast their shape on what they stand on. |
 | `snap` | 0.25 | Positions are rounded to this many pixels; 0 keeps them as they are. |
 | `preview_color` | `#A0FFFFFF` | Colour of the see-through copy that shows where the item in the hand would stand. |
+| `counts` | `"never"` | When the count of a stack of more than one is written at its foot, facing the front: `always`, `hover` (while the cursor is on it), `never`. For places that keep whole stacks, such as the shelves of a cupboard. |
+| `physics` | none | Items fall, tip over and push each other, see below. Without it they stand exactly as they are put. |
+| `hover_lift` | `0` | Pixels an item rises while the cursor is on it. 0 keeps it still; the outline says what the cursor is on. |
+| `frame_pose` | `false` | Every item stands as an item frame shows it. By default an item with a 3D model (a can, a jar, a bottle) stands as it is modelled, upright, where a frame would lay it on its back to face out of the wall; flat icons stand as in a frame either way. |
 
 A surface:
 
@@ -582,6 +590,7 @@ A surface:
 | `clearance` | 64 | Room above it: an item that would not fit is made smaller. |
 | `aim_height` | 0 | How the cursor finds a place. 0: it points at the surface itself, right for a table seen from above. A shelf seen from the front is too thin a sliver for that: with a height, the cursor points at a slope from the front edge (the side of the smaller z) up to this height over the back edge, so that low in the opening means at the front and high in the opening means at the back. |
 | `wall` | none | The z of a wall behind the surface: light in the room falls on it too. |
+| `open` | `[]` | With `physics`, the sides with no wall: `front` (-z), `back`, `left` (+x, the viewer's left), `right`. A thing pushed or pulled over such an edge falls off, onto a surface below or, with none there, out of the station into the player's inventory, and onto the ground in front of the station where the inventory is full. |
 
 What the player does: a stack on the cursor stands see-through where the cursor points. A click puts it down (as much of it as
 a slot takes: with `maxStack(1)` one item, and the rest stays in the hand for the next place). A click on an item takes it,
@@ -589,8 +598,89 @@ with the turn and size it had; a drag moves it. The wheel turns what is in the h
 towards the player, Control+wheel sizes it; the right button held turns it freely with the mouse. Items settle on their lowest
 point whichever way they are turned. Shift-click takes an item back into the inventory.
 
+### placing.physics
+
+```json
+"placing": {"group": "items", "surfaces": [...], "physics": {}}
+```
+
+Things put down are solid. One let go of on its edge falls onto a side unless something holds it up; one put down where
+another stands slides out of it (as a whole, so the other is not knocked over); one put on top of another stays there, and
+comes down when the one below is taken away. Each item is a box the size of its model; the surface's edges are walls and its
+clearance a ceiling; a flat icon drawn on the slant (a carrot, a fish) collides with the narrow box round its pixels, turned with them. Flat items (food icons) stand as they were turned and rock when bumped, as a roly-poly toy does, coming
+back to that turn. The player who moves things works it out on their side and sends where everything came to rest; everyone
+else sees the items glide there.
+
+Each thing is a solid body with a weight: its size times how dense it is (a block by what it is made of: metal, stone, wood,
+wool; anything else as water), and hard to turn as a solid box of that weight is. Things hit each other as such bodies do: a
+stone block shoves an apple aside, an apple hardly moves the block; what hits stops dead (`bounce` gives a little back). A
+thing grips what it stands on: pushed less hard than `friction` times its weight it stays where it is, pushed harder it
+slides and soon stops; nothing slides on by itself.
+
+What fits in is a matter of room, not slots. A thing put down where there is no room pushes the others as any thing does,
+and what is crowded over an open edge falls out: into the inventory of the player at the station, and onto the ground in
+front of the station where the inventory is full. An item that comes without a place (shift-clicked in, brought by a hopper)
+stands on the first free spot, from the back of each surface to the front, made smaller where it does not fit at its size;
+`StationView.hasRoomFor` says whether one more stack would fit somewhere.
+
+The grip is exact, the body is physical. The stack in the hand is held by its top: the point held follows the cursor closely
+(`carry_lag`) and alone decides where it lands. Below the grip it is a weight: it floats `hover` pixels over what is under it,
+sways a little as it is carried (`swing`, at most `swing_angle`) and hangs still within `swing_calm` once the hand is still.
+Carrying never disturbs what stands there: over an item it rises onto it at `climb` where the surface's `headroom` leaves
+room for it on top, and where there is no room it keeps beside the item, at any speed, so it lands where it is seen. With
+`hand_pushes` it is solid instead: it rises only when brought near gently, and swept in fast, or where there is no room
+above, it pushes the item. Going to another surface (a shelf, a door's bin) it hops over in a short arc (`hop_time`),
+touching nothing on the way. Let go of, it drops under the grip with the swing's tilt (a rigid item's tilt cut below its own
+tipping angle, so the swing alone never knocks it over); with `toss` a moving hand tosses it on a little.
+
+Aimed at the top of an item, the stack in the hand goes on it, made as small as it must be to fit under the clearance (down
+to the smallest of `scale_range`; smaller than that, it keeps beside the item). Put on another item, a thing stands as put
+until something touches it or the item under it is moved or taken away.
+
+Things move only when the hand means them to. The left button held on an item and moved drags it along its own surface (the
+cursor past the edge keeps it there, it never drops onto a shelf behind); pressed into a wall at a slant it turns flat
+against it. The right button held and moved turns it, `turn_power` times quicker than without physics. Either way the item
+keeps its weight: the hand pulls it with `hand_force`, so what is in its way is pushed, tipped and knocked aside as far as
+that force moves it, and what cannot give way (an item against a wall) stops it; let go of, it stays where it is (with `toss`, it slides and spins on a little).
+A click without moving still takes it. Whatever is pushed, bumped or crowded over an open edge falls out (`fall_off: any`);
+with `fall_off: held` only an item dragged by hand over it and let go of there does, and anything else meets the edge as a wall.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `gravity` | `200` | How fast things fall, pixels per second squared. |
+| `friction` | `0.6` | 0..1, how hard a thing grips what it stands on or touches, as a share of its weight: pushed less than that it stays put, pushed harder it slides and slows down. |
+| `upright_flat` | `true` | Flat items (an icon: bread, a carrot) stand as they were turned and rock back when bumped. `false`: thin rigid cards that fall over. |
+| `rock` | `25` | Degrees a flat item rocks at most when bumped; 0 keeps it rigidly upright. |
+| `flat_depth` | `0` | Pixels of depth a flat item collides with at least. 0: as thin as it is drawn, so a lying icon lies right on what is under it and icons stand against each other with nothing between. |
+| `hover` | `1.5` | Pixels the stack in the hand floats over what is under it (0..8). |
+| `carry_lag` | `0.035` | Seconds the point held takes to close half the way to the cursor. 0 follows at once. |
+| `reach` | `4` | With `hand_pushes`, pixels around the stack in the hand within which it rises onto an item. |
+| `climb` | `48` | Pixels a second the stack in the hand rises onto an item it comes near; it comes down three times as fast. |
+| `swing` | `true` | The stack in the hand hangs from its top and swings as it is carried, as a weight does; `false` keeps it upright. |
+| `swing_angle` | `12` | Degrees the stack in the hand swings out at most. |
+| `swing_calm` | `0.15` | Seconds the swing takes to die down once the hand is still. |
+| `hop_time` | `0.1` | Seconds the stack in the hand takes to hop over to another surface; 0 jumps there at once. |
+| `toss` | `0` | 0..1, how much of the hand's speed a stack let go of while moving keeps (at most 24 pixels a second), and of its turning an item let go of while turned. 0 stops each where it is let go. |
+| `hand_pushes` | `false` | The stack in the hand is solid: swept in fast it shoves and tips what it meets, and it rises onto items within `reach` only when brought near gently. `false`: it passes things by, rising onto them or keeping beside them. |
+| `hand_force` | `40000` | How hard the hand pulls an item it drags or turns, as weight (cubic pixels times density) times pixels a second squared. An apple follows the cursor at once, a stone block comes slower, a row of them slower still, and what cannot give way (pressed against a wall) stops it: nothing is pressed into anything. |
+| `turn_power` | `1.5` | How much quicker an item turns by hand with physics than `placing.turn_speed` says. |
+| `fall_off` | `any` | What may go over an open edge: `any`, anything pushed, bumped or crowded there; `held`, only what the hand drags there. |
+| `max_speed` | `80` | Pixels per second a thing moves at most: a push never flings it far. |
+| `bounce` | `0` | 0..0.5, how much of the speed a thing hits something with it bounces back with. 0: it stops dead where it lands or hits. |
+
+A surface's `headroom` (pixels, the `clearance` when not given) is how high over it the stack in the hand may be lifted to
+pass over what stands there: more than the clearance where open air is over the surface (a drawer pulled out).
+
+Surfaces on parts that move (a drawer, the shelves of a door) are written where the part stands at one of its ends: open,
+or shut for a door that stops part way open and would turn its shelves askew. The cursor, the see-through preview and the
+pool of light find them where they are now; the station's code moves
+what stands on them with the part (`StationView.setSurfaceTransform`) and hides it all while it is shut away
+(`setPlacingVisible`).
+
 The light of lights in the scene stays in the room it is in: a pool on the surface under it and on its `wall`, cut off at the
-surface's edges, not through a board to the shelf below.
+surface's edges, not through a board to the shelf below. Models drawn `lit_as_block` (the scene's copy of a cupboard) take it
+too: their walls and boards brighten round a lantern standing among them, faces turned away from it stay dark, and the
+surfaces stand between it and what is on their other side.
 
 ## captions
 

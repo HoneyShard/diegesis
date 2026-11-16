@@ -771,6 +771,11 @@ public final class FocusScreen extends Screen {
             showOverlay(null);
             return true;
         }
+        // The station's own keys come first (a field it types into), then the library's.
+        ClientStation keyed = FocusController.get().station();
+        if (overlay == null && keyed != null && keyed.key(keyCode, scanCode, modifiers)) {
+            return true;
+        }
         if (Minecraft.getInstance().options.keyInventory.matches(keyCode, scanCode)) {
             onClose();
             return true;
@@ -795,6 +800,15 @@ public final class FocusScreen extends Screen {
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public boolean charTyped(char character, int modifiers) {
+        ClientStation keyed = FocusController.get().station();
+        if (overlay == null && keyed != null && keyed.typed(character, modifiers)) {
+            return true;
+        }
+        return super.charTyped(character, modifiers);
     }
 
     /** The edge of the screen a movement key or an arrow key points to, or null. */

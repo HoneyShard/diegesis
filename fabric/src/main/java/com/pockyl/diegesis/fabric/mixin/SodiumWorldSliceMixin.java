@@ -25,6 +25,9 @@ abstract class SodiumWorldSliceMixin {
     private void diegesis$clearBlock(int x, int y, int z, CallbackInfoReturnable<BlockState> cir) {
         if (ClearBlocks.hides(x, y, z) || HiddenBlocks.isHidden(x, y, z)) {
             cir.setReturnValue(Blocks.AIR.defaultBlockState());
+        } else {
+            // Sodium without Indium never asks the model: the block read for the mesh is all there is to hear.
+            HiddenBlocks.built(x, y, z);
         }
     }
 }

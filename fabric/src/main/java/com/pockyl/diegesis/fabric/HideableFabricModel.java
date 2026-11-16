@@ -26,6 +26,7 @@ final class HideableFabricModel extends ForwardingBakedModel {
     @Override
     public void emitBlockQuads(BlockAndTintGetter level, BlockState state, BlockPos pos, Supplier<RandomSource> random, RenderContext context) {
         if (!HiddenBlocks.isHidden(pos)) {
+            HiddenBlocks.built(pos);
             super.emitBlockQuads(level, state, pos, random, context);
         }
     }

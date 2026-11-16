@@ -80,6 +80,24 @@ public interface StationBehavior {
     }
 
     /**
+     * A key went down while the local player works at the station, before the library's own keys (leaving, going over, the slot and
+     * drop keys). Return true to take it: the library then does nothing with it. Repeats of a held key come too. Take only what
+     * the station needs at that moment (typing into a field it shows), or the player loses the library's keys.
+     *
+     * @param keyCode   GLFW key code
+     * @param scanCode  the platform's scan code
+     * @param modifiers GLFW modifier bits (shift, control, alt)
+     */
+    default boolean onKey(StationView view, int keyCode, int scanCode, int modifiers) {
+        return false;
+    }
+
+    /** A character was typed while the local player works at the station. Return true to take it. */
+    default boolean onChar(StationView view, char character, int modifiers) {
+        return false;
+    }
+
+    /**
      * Shift + click on a stack of the player's inventory while working at the station. Return true when the station takes care
      * of it (it sends its own action); false lets the library move the stack into the station's slots as usual.
      *

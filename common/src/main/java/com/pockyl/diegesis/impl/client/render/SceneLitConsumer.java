@@ -1,0 +1,219 @@
+package com.pockyl.diegesis.impl.client.render;
+
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.core.Vec3i;
+import org.joml.Matrix3f;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
+import org.joml.Vector4f;
+
+import com.pockyl.diegesis.api.scene.PlaceSurface;
+
+import java.util.List;
+
+/**
+ * Passes the vertices of a model lit as a block on, each brightened by the scene's lights near it: a lantern put on a shelf
+ * lights the walls and the boards around it, not only itself. A face turned away from a light takes none of it, and the
+ * placing's surfaces stand between a light and what is on their other side, so the light stays on its own shelf.
+ *
+ * <p>A block model's faces are big (the back wall of a cupboard is one face with four corners), and light given at the corners
+ * only would miss the middle: the faces are cut into pieces about {@link #PIECE} pixels wide, so that the light falls as a pool.
+ */
+final class SceneLitConsumer implements VertexConsumer {
+    /** How far (pixels) a point must be past a surface's plane before the surface hides a light from it. */
+    private static final float PAST = 0.05F;
+    /** The size (pixels) of the pieces a face is cut into, and the most pieces along a side. */
+    private static final float PIECE = 1.5F;
+    private static final int MOST_PIECES = 10;
+    /** The brightest a light map coordinate goes (level 15). */
+    private static final int FULL = 240;
+
+    private final VertexConsumer delegate;
+    private final Matrix4f toStation;
+    private final Matrix3f normalToStation;
+    private final List<float[]> lights;
+    private final List<PlaceSurface> surfaces;
+    private final Vector3f position = new Vector3f();
+    private final Vector3f normal = new Vector3f();
+
+    /**
+     * @param toStation       from the vertices' space (the pose stack's) into station pixels
+     * @param normalToStation the same for normals
+     * @param lights          x, y, z (station pixels), level, radius of each light
+     */
+    SceneLitConsumer(VertexConsumer delegate, Matrix4f toStation, Matrix3f normalToStation, List<float[]> lights, List<PlaceSurface> surfaces) {
+        this.delegate = delegate;
+        this.toStation = toStation;
+        this.normalToStation = normalToStation;
+        this.lights = lights;
+        this.surfaces = surfaces;
+    }
+
+    @Override
+    public void vertex(float x, float y, float z, float red, float green, float blue, float alpha, float u, float v, int overlay, int light,
+            float normalX, float normalY, float normalZ) {
+        toStation.transformPosition(position.set(x, y, z));
+        normalToStation.transform(normal.set(normalX, normalY, normalZ));
+        if (normal.lengthSquared() > 1.0e-8F) {
+            normal.normalize();
+        }
+        float block = light & 0xFFFF;
+        for (float[] source : lights) {
+            block = Math.max(block, levelFrom(source) * 16.0F);
+        }
+        int lit = Math.min(FULL, Math.round(block)) | light & 0xFFFF0000;
+        delegate.vertex(x, y, z, red, green, blue, alpha, u, v, overlay, lit, normalX, normalY, normalZ);
+    }
+
+    /** A face of a block model, cut into pieces, each corner of each piece lit by the scene's lights. */
+    @Override
+    public void putBulkData(PoseStack.Pose pose, BakedQuad quad, float[] brightness, float red, float green, float blue, int[] lightmap,
+            int overlay, boolean readColor) {
+        int[] data = quad.getVertices();
+        if (data.length != 32) {
+            VertexConsumer.super.putBulkData(pose, quad, brightness, red, green, blue, lightmap, overlay, readColor);
+            return;
+        }
+        Vec3i facing = quad.getDirection().getNormal();
+        Vector3f normal = pose.normal().transform(new Vector3f(facing.getX(), facing.getY(), facing.getZ()));
+        float[][] corner = new float[4][];
+        for (int k = 0; k < 4; k++) {
+            int at = k * 8;
+            Vector4f position = pose.pose().transform(new Vector4f(Float.intBitsToFloat(data[at]), Float.intBitsToFloat(data[at + 1]),
+                    Float.intBitsToFloat(data[at + 2]), 1.0F));
+            int color = data[at + 3];
+            float shade = brightness[k];
+            float r = (readColor ? (color & 0xFF) / 255.0F : 1.0F) * shade * red;
+            float g = (readColor ? (color >> 8 & 0xFF) / 255.0F : 1.0F) * shade * green;
+            float b = (readColor ? (color >> 16 & 0xFF) / 255.0F : 1.0F) * shade * blue;
+            // A face's own light (emissive faces carry it) counts where it is brighter than the world's.
+            int baked = data[at + 6];
+            int light = lightmap[k];
+            float blockLight = Math.max(light & 0xFFFF, baked & 0xFFFF);
+            float skyLight = Math.max(light >>> 16 & 0xFFFF, baked >>> 16 & 0xFFFF);
+            corner[k] = new float[] {position.x(), position.y(), position.z(), r, g, b, Float.intBitsToFloat(data[at + 4]),
+                    Float.intBitsToFloat(data[at + 5]), blockLight, skyLight};
+        }
+        int across = pieces(corner[0], corner[1]);
+        int down = pieces(corner[0], corner[3]);
+        float[] point = new float[10];
+        for (int i = 0; i < across; i++) {
+            for (int j = 0; j < down; j++) {
+                emit(corner, (float) i / across, (float) j / down, point, overlay, normal);
+                emit(corner, (float) (i + 1) / across, (float) j / down, point, overlay, normal);
+                emit(corner, (float) (i + 1) / across, (float) (j + 1) / down, point, overlay, normal);
+                emit(corner, (float) i / across, (float) (j + 1) / down, point, overlay, normal);
+            }
+        }
+    }
+
+    /** How many pieces the side from {@code a} to {@code b} is cut into. */
+    private int pieces(float[] a, float[] b) {
+        Vector3f from = toStation.transformPosition(new Vector3f(a[0], a[1], a[2]));
+        Vector3f to = toStation.transformPosition(new Vector3f(b[0], b[1], b[2]));
+        return Math.max(1, Math.min(MOST_PIECES, (int) Math.ceil(from.distance(to) / PIECE)));
+    }
+
+    /** One corner of a piece, at {@code s} along the face's first side and {@code t} along its second, mixed from its corners. */
+    private void emit(float[][] corner, float s, float t, float[] point, int overlay, Vector3f normal) {
+        float w0 = (1.0F - s) * (1.0F - t);
+        float w1 = s * (1.0F - t);
+        float w2 = s * t;
+        float w3 = (1.0F - s) * t;
+        for (int n = 0; n < point.length; n++) {
+            point[n] = corner[0][n] * w0 + corner[1][n] * w1 + corner[2][n] * w2 + corner[3][n] * w3;
+        }
+        int light = Math.round(point[8]) | Math.round(point[9]) << 16;
+        vertex(point[0], point[1], point[2], point[3], point[4], point[5], 1.0F, point[6], point[7], overlay, light, normal.x(), normal.y(),
+                normal.z());
+    }
+
+    /** The light a source gives the current vertex: soft falloff over its radius, by how squarely the face looks at it. */
+    private float levelFrom(float[] source) {
+        float dx = source[0] - position.x;
+        float dy = source[1] - position.y;
+        float dz = source[2] - position.z;
+        float distance = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        float near = 1.0F - distance / source[4];
+        if (near <= 0.0F) {
+            return 0.0F;
+        }
+        float facing = distance < 1.0e-4F ? 1.0F : (normal.x * dx + normal.y * dy + normal.z * dz) / distance;
+        if (facing <= -0.05F || hidden(source, position, surfaces)) {
+            return 0.0F;
+        }
+        return source[3] * near * (2.0F - near) * Math.min(1.0F, 0.45F + Math.max(0.0F, facing));
+    }
+
+    /** Whether one of {@code surfaces} lies between the source and {@code position} (station pixels). */
+    static boolean hidden(float[] source, Vector3f position, List<PlaceSurface> surfaces) {
+        for (PlaceSurface surface : surfaces) {
+            float plane = surface.height();
+            float fromLight = source[1] - plane;
+            float fromVertex = position.y - plane;
+            if (fromLight > PAST && fromVertex < -PAST || fromLight < -PAST && fromVertex > PAST) {
+                float t = fromLight / (fromLight - fromVertex);
+                float x = source[0] + (position.x - source[0]) * t;
+                float z = source[2] + (position.z - source[2]) * t;
+                if (x >= Math.min(surface.from().x(), surface.to().x()) && x <= Math.max(surface.from().x(), surface.to().x())
+                        && z >= Math.min(surface.from().y(), surface.to().y()) && z <= Math.max(surface.from().y(), surface.to().y())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public VertexConsumer vertex(double x, double y, double z) {
+        delegate.vertex(x, y, z);
+        return this;
+    }
+
+    @Override
+    public VertexConsumer color(int red, int green, int blue, int alpha) {
+        delegate.color(red, green, blue, alpha);
+        return this;
+    }
+
+    @Override
+    public VertexConsumer uv(float u, float v) {
+        delegate.uv(u, v);
+        return this;
+    }
+
+    @Override
+    public VertexConsumer overlayCoords(int u, int v) {
+        delegate.overlayCoords(u, v);
+        return this;
+    }
+
+    @Override
+    public VertexConsumer uv2(int u, int v) {
+        delegate.uv2(u, v);
+        return this;
+    }
+
+    @Override
+    public VertexConsumer normal(float x, float y, float z) {
+        delegate.normal(x, y, z);
+        return this;
+    }
+
+    @Override
+    public void endVertex() {
+        delegate.endVertex();
+    }
+
+    @Override
+    public void defaultColor(int red, int green, int blue, int alpha) {
+        delegate.defaultColor(red, green, blue, alpha);
+    }
+
+    @Override
+    public void unsetDefaultColor() {
+        delegate.unsetDefaultColor();
+    }
+}
