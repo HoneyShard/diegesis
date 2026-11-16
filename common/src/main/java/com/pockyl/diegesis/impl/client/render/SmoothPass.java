@@ -361,7 +361,8 @@ public final class SmoothPass {
 
         private void add(float x, float y, float z) {
             VIEW_PROJECTION.transform(clip.set(x, y, z, 1.0F));
-            if (clip.w <= 1.0e-4F) {
+            // Behind the camera, or not a number (a painter given a broken size): the whole screen, so it is still drawn.
+            if (!(clip.w > 1.0e-4F) || !Float.isFinite(clip.x) || !Float.isFinite(clip.y)) {
                 minX = -1.0F;
                 minY = -1.0F;
                 maxX = 1.0F;

@@ -1,11 +1,15 @@
 package com.pockyl.diegesis.api.station;
 
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.MenuType;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * How a menu-backed station ({@link Authority#MENU}) maps onto the block's vanilla menu: which menu types it takes, which
@@ -23,6 +27,7 @@ public final class MenuBinding {
     public static final int DEFAULT_AUTO_DELAY = 3;
 
     private final List<MenuType<?>> accepted;
+    private final Set<ResourceLocation> acceptedNames;
     private final Map<String, SlotRange> slots;
     private final Map<String, Integer> outputs;
     private final int openTimeoutTicks;
@@ -30,6 +35,7 @@ public final class MenuBinding {
 
     private MenuBinding(Builder builder) {
         this.accepted = List.copyOf(builder.accepted);
+        this.acceptedNames = Set.copyOf(builder.acceptedNames);
         this.slots = Map.copyOf(builder.slots);
         this.outputs = Map.copyOf(builder.outputs);
         this.openTimeoutTicks = builder.openTimeoutTicks;
@@ -45,7 +51,12 @@ public final class MenuBinding {
     }
 
     public boolean accepts(MenuType<?> type) {
-        return type != null && accepted.contains(type);
+        return type != null && (accepted.contains(type) || !acceptedNames.isEmpty() && acceptedNames.contains(BuiltInRegistries.MENU.getKey(type)));
+    }
+
+    /** Menu types taken by their registry name ({@link Builder#alsoAccepts}), whether or not their mod is installed. */
+    public Set<ResourceLocation> acceptedNames() {
+        return acceptedNames;
     }
 
     public List<MenuType<?>> accepted() {
@@ -76,6 +87,7 @@ public final class MenuBinding {
 
     public static final class Builder {
         private final List<MenuType<?>> accepted;
+        private final Set<ResourceLocation> acceptedNames = new LinkedHashSet<>();
         private final Map<String, SlotRange> slots = new LinkedHashMap<>();
         private final Map<String, Integer> outputs = new LinkedHashMap<>();
         private int openTimeoutTicks = DEFAULT_OPEN_TIMEOUT;
@@ -83,6 +95,18 @@ public final class MenuBinding {
 
         private Builder(List<MenuType<?>> accepted) {
             this.accepted = accepted;
+        }
+
+        /**
+         * Also takes the menu types of these registry names: another mod's menu that has the same slots as the accepted ones (a mod
+         * that gives the crafting table a menu of its own built on vanilla's, Visual Workbench's {@code visualworkbench:crafting}).
+         * Named, not given as types: that mod registers them after stations are built, and need not be installed at all.
+         */
+        public Builder alsoAccepts(ResourceLocation... names) {
+            for (ResourceLocation name : names) {
+                acceptedNames.add(Objects.requireNonNull(name));
+            }
+            return this;
         }
 
         /** The station's slot group {@code group} shows {@code count} menu slots from {@code firstMenuSlot}. */

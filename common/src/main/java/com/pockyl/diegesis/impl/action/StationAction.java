@@ -53,7 +53,12 @@ public sealed interface StationAction {
         /** Double click: gathers matching items onto the cursor. */
         PICKUP_ALL,
         /** A right click nothing takes: the carried stack goes back into the inventory; the target does not matter. */
-        PUT_AWAY
+        PUT_AWAY,
+        /**
+         * A placed item fell out of the station by itself (pushed over an open edge): into the inventory, and what has no room
+         * there drops on the ground in front of the station.
+         */
+        SPILL
     }
 
     /** A place an item can be clicked: a station slot, an inventory slot or a station output. */

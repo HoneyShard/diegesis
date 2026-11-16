@@ -8,6 +8,7 @@ import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4fc;
 import org.joml.Vector3fc;
 
 import com.pockyl.diegesis.api.state.StationState;
@@ -41,8 +42,9 @@ public interface StationView {
 
     /**
      * Whether the block's own model is left out of the world in this frame, for a station that {@code hidesBlock()}: draw the
-     * scene's copy of the block exactly then, and the two swap in one frame without a blink. It follows {@link #isInUse} and
-     * {@code StationBehavior.holdsBlock} a frame late, while the chunk is rebuilt.
+     * scene's copy of the block exactly then, and the two swap without a blink. It follows {@link #isInUse} and
+     * {@code StationBehavior.holdsBlock} a frame late, and after them stays true until the chunk, built on another thread, shows
+     * the block again.
      */
     default boolean isBlockHidden() {
         return isInUse();
@@ -146,6 +148,42 @@ public interface StationView {
     void setInventoryFilter(Predicate<ItemStack> filter);
 
     /**
+     * Moves what stands on a surface of the scene's {@code placing} with a part that moves: a drawer sliding out, the shelves
+     * of a door. {@code transform} is in station pixels, from where the surface is written in the scene to where it is now;
+     * write the surface where the part stands open, so that the cursor finds its places there. The identity, the default,
+     * leaves the items where they are.
+     *
+     * @param surface the surface's index in the scene's {@code placing.surfaces}
+     */
+    default void setSurfaceTransform(int surface, Matrix4fc transform) {
+    }
+
+    /**
+     * Whether the items of the scene's {@code placing} are drawn: off while they are shut away, inside a cupboard whose
+     * copy the scene no longer shows. On by default; set it every frame it should hold.
+     */
+    default void setPlacingVisible(boolean visible) {
+    }
+
+    /**
+     * Whether the items on one surface of the scene's {@code placing} are drawn, and the surface takes any: off while that
+     * surface is shut away (one of two drawers pushed in) and the rest are open. On by default; kept until set again.
+     *
+     * @param surface the surface's index in the scene's {@code placing.surfaces}
+     */
+    default void setSurfaceVisible(int surface, boolean visible) {
+    }
+
+    /**
+     * Whether the scene's {@code placing} has room for one more stack of {@code stack}: a free spot on a surface shown now where
+     * it stands clear of the items there (at its full size, or smaller down to {@code scale_range}'s least). What fits in is a
+     * matter of room, not of slots: a station asks before it takes a stack in by a shift-click. False without a placing.
+     */
+    default boolean hasRoomFor(net.minecraft.world.item.ItemStack stack) {
+        return false;
+    }
+
+    /**
      * Whether the library leaves out the stack on the local player's cursor while it is over the scene: the station draws it
      * itself, as the tool it is (a knife over a board that comes down when clicked). Set it every frame it should hold; it is off
      * again when the player leaves.
@@ -198,6 +236,20 @@ public interface StationView {
      * Set from {@code onSceneReady} or {@code onOpen}, the camera flies straight to the moved shot.
      */
     default void moveCamera(float x, float y, float z) {
+    }
+
+    /**
+     * Mirrors the station's camera (its shot, inventory shot and glances) across the upright plane {@code x} = {@code plane}
+     * scene pixels: a shot from the front left looks from the front right. For a block that comes in two hands, such as a
+     * cupboard whose door hangs on either side, so that the camera stands on the side the door leaves free. {@code NaN} turns it
+     * off. Set from {@code onSceneReady} or {@code onOpen}; kept until set again.
+     */
+    default void mirrorCamera(float plane) {
+    }
+
+    /** The plane the camera is mirrored across ({@link #mirrorCamera}), or {@code NaN}. */
+    default float cameraMirror() {
+        return Float.NaN;
     }
 
     /** How far the camera is moved by {@link #moveCamera}, scene pixels. */

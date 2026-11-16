@@ -6,6 +6,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -15,12 +16,72 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class HiddenBlocks {
     private static final Set<BlockPos> HIDDEN = ConcurrentHashMap.newKeySet();
+    /**
+     * Blocks shown again whose chunk is not built with them yet: chunks are built on other threads and come a few frames later, so
+     * the scene keeps standing in for such a block until its own model has been built and put on screen.
+     */
+    private static final Map<BlockPos, Showing> SHOWING = new ConcurrentHashMap<>();
+    /** Frames the scene stays after the block's model was built: the chunk is put on screen at the start of a later frame. */
+    private static final int FRAMES_AFTER_BUILT = 2;
+    /** The most frames the scene waits, for a renderer whose builder this never hears: then the two overlap a moment instead. */
+    private static final int MOST_FRAMES = 30;
+
+    private static final class Showing {
+        private volatile boolean built;
+        private int frames;
+        private int sinceBuilt;
+    }
 
     private HiddenBlocks() {
     }
 
     public static boolean isHidden(BlockPos pos) {
         return !HIDDEN.isEmpty() && HIDDEN.contains(pos);
+    }
+
+    /**
+     * Whether a scene draws the block now in its place: while it is hidden, and after that until the chunk shows the block's own
+     * model again, so the two never leave a frame with neither.
+     */
+    public static boolean isStoodIn(BlockPos pos) {
+        return isHidden(pos) || !SHOWING.isEmpty() && SHOWING.containsKey(pos);
+    }
+
+    /** A chunk builder builds the block's own model at {@code pos} (it is not hidden); from any thread. */
+    public static void built(BlockPos pos) {
+        if (!SHOWING.isEmpty()) {
+            Showing showing = SHOWING.get(pos);
+            if (showing != null) {
+                showing.built = true;
+            }
+        }
+    }
+
+    /** {@link #built(BlockPos)} by coordinates, for a mesh builder that reads every block of a section: no position is made. */
+    public static void built(int x, int y, int z) {
+        if (SHOWING.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<BlockPos, Showing> entry : SHOWING.entrySet()) {
+            BlockPos pos = entry.getKey();
+            if (pos.getX() == x && pos.getY() == y && pos.getZ() == z) {
+                entry.getValue().built = true;
+            }
+        }
+    }
+
+    /** Once a frame, on the render thread: a block whose own model is on screen again needs its scene no longer. */
+    public static void frame() {
+        if (SHOWING.isEmpty()) {
+            return;
+        }
+        SHOWING.values().removeIf(showing -> {
+            showing.frames++;
+            if (showing.built) {
+                showing.sinceBuilt++;
+            }
+            return showing.sinceBuilt > FRAMES_AFTER_BUILT || showing.frames > MOST_FRAMES;
+        });
     }
 
     /** {@link #isHidden(BlockPos)} by coordinates, for a mesh builder that reads every block of a section: no position is made. */
@@ -48,6 +109,13 @@ public final class HiddenBlocks {
         Set<BlockPos> changed = new HashSet<>(HIDDEN);
         changed.addAll(wanted);
         changed.removeIf(pos -> HIDDEN.contains(pos) && wanted.contains(pos));
+        for (BlockPos pos : changed) {
+            if (wanted.contains(pos)) {
+                SHOWING.remove(pos);
+            } else {
+                SHOWING.put(pos, new Showing());
+            }
+        }
         HIDDEN.retainAll(wanted);
         HIDDEN.addAll(wanted);
         Minecraft minecraft = Minecraft.getInstance();

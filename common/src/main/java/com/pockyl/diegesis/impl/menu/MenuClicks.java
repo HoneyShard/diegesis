@@ -80,14 +80,15 @@ public final class MenuClicks {
                 return clicks;
             }
             ClickType type = switch (click.kind()) {
-                case QUICK_MOVE -> ClickType.QUICK_MOVE;
+                case QUICK_MOVE, SPILL -> ClickType.QUICK_MOVE;
                 case PICKUP_ALL -> ClickType.PICKUP_ALL;
                 default -> ClickType.PICKUP;
             };
             clicks.add(new Click(slot, click.kind() == ClickKind.PICKUP_ALL ? 0 : click.button(), type));
         } else if (action instanceof StationAction.Spread spread) {
-            // Vanilla's three-phase drag: start, one per slot, end; button 0 shares evenly, 1 puts one into each.
-            int kind = spread.button() == 1 ? 1 : 0;
+            // Vanilla's three-phase drag: start, one per slot, end; button 0 shares evenly, 1 puts one into each, 2 (creative
+            // mode's middle drag) a full stack into each, which the server allows only to a player in creative mode.
+            int kind = spread.button() == 1 || spread.button() == 2 ? spread.button() : 0;
             List<Integer> slots = new ArrayList<>();
             for (Target target : spread.targets()) {
                 int slot = slotOf(menu, binding, inventory, target);

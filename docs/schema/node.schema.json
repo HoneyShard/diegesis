@@ -590,6 +590,32 @@
           "$ref": "#/definitions/color",
           "description": "Colour of the see-through copy of the item in the hand.",
           "default": "#A0FFFFFF"
+        },
+        "counts": {
+          "type": "string",
+          "enum": [
+            "always",
+            "hover",
+            "never"
+          ],
+          "description": "When the count of a stack of more than one is written at its foot.",
+          "default": "never"
+        },
+        "physics": {
+          "$ref": "#/definitions/placing_physics",
+          "description": "Items fall, tip over and push each other; without it they stand exactly as put."
+        },
+        "hover_lift": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 4,
+          "description": "Pixels an item rises while the cursor is on it; 0 keeps it still.",
+          "default": 0
+        },
+        "frame_pose": {
+          "type": "boolean",
+          "description": "Every item stands as an item frame shows it; false: 3D item models stand as they are modelled.",
+          "default": false
         }
       },
       "patternProperties": {
@@ -600,6 +626,151 @@
         "group",
         "surfaces"
       ]
+    },
+    "placing_physics": {
+      "type": "object",
+      "description": "Solid placed items: they fall, tip over and shove each other.",
+      "properties": {
+        "gravity": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 4000,
+          "description": "How fast things fall, pixels per second squared.",
+          "default": 200
+        },
+        "friction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How hard a thing grips what it stands on or touches, as a share of its weight.",
+          "default": 0.6
+        },
+        "upright_flat": {
+          "type": "boolean",
+          "description": "Flat items (icons) stand as turned and rock back when bumped; false: thin cards that fall over.",
+          "default": true
+        },
+        "rock": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 45,
+          "description": "Degrees a flat item rocks at most when bumped; 0 keeps it rigidly upright.",
+          "default": 25
+        },
+        "flat_depth": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Pixels of depth a flat item collides with at least; 0: as thin as it is drawn.",
+          "default": 0
+        },
+        "hover": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 8,
+          "description": "Pixels the stack in the hand floats over what is under it.",
+          "default": 1.5
+        },
+        "carry_lag": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Seconds the point held takes to close half the way to the cursor; 0 follows at once.",
+          "default": 0.035
+        },
+        "reach": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 8,
+          "description": "With hand_pushes: pixels around the stack in the hand within which it rises onto an item.",
+          "default": 4
+        },
+        "climb": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "Pixels per second the stack in the hand rises onto an item it comes near.",
+          "default": 48
+        },
+        "swing": {
+          "type": "boolean",
+          "description": "The stack in the hand hangs from its top and swings as it is carried; false keeps it upright.",
+          "default": true
+        },
+        "swing_angle": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 60,
+          "description": "Degrees the stack in the hand swings out at most.",
+          "default": 12
+        },
+        "swing_calm": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 2,
+          "description": "Seconds the swing takes to die down once the hand is still.",
+          "default": 0.15
+        },
+        "hop_time": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.5,
+          "description": "Seconds the stack in the hand takes to hop over to another surface; 0 jumps there at once.",
+          "default": 0.1
+        },
+        "toss": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How much of the hand's speed (and turning) a thing let go of while moving keeps; 0 stops it.",
+          "default": 0
+        },
+        "hand_pushes": {
+          "type": "boolean",
+          "description": "The stack in the hand is solid and, swept in fast, shoves what it meets; false: it passes things by.",
+          "default": false
+        },
+        "hand_force": {
+          "type": "number",
+          "minimum": 1000,
+          "maximum": 10000000,
+          "description": "How hard the hand pulls an item it drags or turns: a heavy thing comes slower, and what does not give way stops it.",
+          "default": 40000
+        },
+        "turn_power": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 3,
+          "description": "How much quicker an item turns by hand with physics than placing.turn_speed says.",
+          "default": 1.5
+        },
+        "fall_off": {
+          "enum": [
+            "held",
+            "any"
+          ],
+          "description": "What may go over an open edge: only what the hand drags there, or anything.",
+          "default": "any"
+        },
+        "max_speed": {
+          "type": "number",
+          "minimum": 10,
+          "maximum": 400,
+          "description": "Pixels per second a thing moves at most.",
+          "default": 80
+        },
+        "bounce": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.5,
+          "description": "How much of the speed a thing hits something with it bounces back with; 0 stops it dead.",
+          "default": 0
+        }
+      },
+      "patternProperties": {
+        "^\\$": {}
+      },
+      "additionalProperties": false
     },
     "place_surface": {
       "type": "object",
@@ -634,6 +805,25 @@
         "wall": {
           "type": "number",
           "description": "The z of a wall behind the surface: light in the room falls on it too."
+        },
+        "open": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "front",
+              "back",
+              "left",
+              "right"
+            ]
+          },
+          "description": "Sides with no wall (physics): a thing pushed over them falls off, onto a surface below or into the inventory.",
+          "default": []
+        },
+        "headroom": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 256,
+          "description": "Physics: how high over the surface the stack in the hand may be lifted; the clearance by default."
         }
       },
       "patternProperties": {
@@ -1180,9 +1370,10 @@
           "type": "string",
           "enum": [
             "up",
-            "front"
+            "front",
+            "camera"
           ],
-          "description": "up: the count lies on the slot; front: it stands at the item's foot facing the front.",
+          "description": "up: the count lies on the slot; front: it stands at the item's foot facing the front; camera: at the item's foot, always turned to the camera like a name tag.",
           "default": "up"
         }
       },
@@ -1219,6 +1410,16 @@
           "maximum": 64,
           "description": "Size of the item and of the click zone, pixels.",
           "default": 8
+        },
+        "count_facing": {
+          "type": "string",
+          "enum": [
+            "up",
+            "front",
+            "camera"
+          ],
+          "description": "Which way the count faces: up (default), front, camera.",
+          "default": "up"
         }
       },
       "patternProperties": {
@@ -2700,6 +2901,369 @@
             }
           ],
           "description": "Colour of the see-through copy of the item in the hand."
+        },
+        "counts": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "always",
+                "hover",
+                "never"
+              ],
+              "description": "When the count of a stack of more than one is written at its foot.",
+              "default": "never"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "When the count of a stack of more than one is written at its foot."
+        },
+        "physics": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/placing_physics_partial",
+              "description": "Items fall, tip over and push each other; without it they stand exactly as put."
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Items fall, tip over and push each other; without it they stand exactly as put."
+        },
+        "hover_lift": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 4,
+              "description": "Pixels an item rises while the cursor is on it; 0 keeps it still.",
+              "default": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Pixels an item rises while the cursor is on it; 0 keeps it still."
+        },
+        "frame_pose": {
+          "anyOf": [
+            {
+              "type": "boolean",
+              "description": "Every item stands as an item frame shows it; false: 3D item models stand as they are modelled.",
+              "default": false
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Every item stands as an item frame shows it; false: 3D item models stand as they are modelled."
+        }
+      },
+      "patternProperties": {
+        "^\\$": {}
+      },
+      "additionalProperties": false
+    },
+    "placing_physics_partial": {
+      "type": "object",
+      "description": "Solid placed items: they fall, tip over and shove each other.",
+      "properties": {
+        "gravity": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 4000,
+              "description": "How fast things fall, pixels per second squared.",
+              "default": 200
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How fast things fall, pixels per second squared."
+        },
+        "friction": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "How hard a thing grips what it stands on or touches, as a share of its weight.",
+              "default": 0.6
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How hard a thing grips what it stands on or touches, as a share of its weight."
+        },
+        "upright_flat": {
+          "anyOf": [
+            {
+              "type": "boolean",
+              "description": "Flat items (icons) stand as turned and rock back when bumped; false: thin cards that fall over.",
+              "default": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Flat items (icons) stand as turned and rock back when bumped; false: thin cards that fall over."
+        },
+        "rock": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 45,
+              "description": "Degrees a flat item rocks at most when bumped; 0 keeps it rigidly upright.",
+              "default": 25
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Degrees a flat item rocks at most when bumped; 0 keeps it rigidly upright."
+        },
+        "flat_depth": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 2,
+              "description": "Pixels of depth a flat item collides with at least; 0: as thin as it is drawn.",
+              "default": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Pixels of depth a flat item collides with at least; 0: as thin as it is drawn."
+        },
+        "hover": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 8,
+              "description": "Pixels the stack in the hand floats over what is under it.",
+              "default": 1.5
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Pixels the stack in the hand floats over what is under it."
+        },
+        "carry_lag": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Seconds the point held takes to close half the way to the cursor; 0 follows at once.",
+              "default": 0.035
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Seconds the point held takes to close half the way to the cursor; 0 follows at once."
+        },
+        "reach": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 8,
+              "description": "With hand_pushes: pixels around the stack in the hand within which it rises onto an item.",
+              "default": 4
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "With hand_pushes: pixels around the stack in the hand within which it rises onto an item."
+        },
+        "climb": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 1000,
+              "description": "Pixels per second the stack in the hand rises onto an item it comes near.",
+              "default": 48
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Pixels per second the stack in the hand rises onto an item it comes near."
+        },
+        "swing": {
+          "anyOf": [
+            {
+              "type": "boolean",
+              "description": "The stack in the hand hangs from its top and swings as it is carried; false keeps it upright.",
+              "default": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The stack in the hand hangs from its top and swings as it is carried; false keeps it upright."
+        },
+        "swing_angle": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 60,
+              "description": "Degrees the stack in the hand swings out at most.",
+              "default": 12
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Degrees the stack in the hand swings out at most."
+        },
+        "swing_calm": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 2,
+              "description": "Seconds the swing takes to die down once the hand is still.",
+              "default": 0.15
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Seconds the swing takes to die down once the hand is still."
+        },
+        "hop_time": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.5,
+              "description": "Seconds the stack in the hand takes to hop over to another surface; 0 jumps there at once.",
+              "default": 0.1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Seconds the stack in the hand takes to hop over to another surface; 0 jumps there at once."
+        },
+        "toss": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "How much of the hand's speed (and turning) a thing let go of while moving keeps; 0 stops it.",
+              "default": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How much of the hand's speed (and turning) a thing let go of while moving keeps; 0 stops it."
+        },
+        "hand_pushes": {
+          "anyOf": [
+            {
+              "type": "boolean",
+              "description": "The stack in the hand is solid and, swept in fast, shoves what it meets; false: it passes things by.",
+              "default": false
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The stack in the hand is solid and, swept in fast, shoves what it meets; false: it passes things by."
+        },
+        "hand_force": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 1000,
+              "maximum": 10000000,
+              "description": "How hard the hand pulls an item it drags or turns: a heavy thing comes slower, and what does not give way stops it.",
+              "default": 40000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How hard the hand pulls an item it drags or turns: a heavy thing comes slower, and what does not give way stops it."
+        },
+        "turn_power": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 3,
+              "description": "How much quicker an item turns by hand with physics than placing.turn_speed says.",
+              "default": 1.5
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How much quicker an item turns by hand with physics than placing.turn_speed says."
+        },
+        "fall_off": {
+          "anyOf": [
+            {
+              "enum": [
+                "held",
+                "any"
+              ],
+              "description": "What may go over an open edge: only what the hand drags there, or anything.",
+              "default": "any"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What may go over an open edge: only what the hand drags there, or anything."
+        },
+        "max_speed": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 10,
+              "maximum": 400,
+              "description": "Pixels per second a thing moves at most.",
+              "default": 80
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Pixels per second a thing moves at most."
+        },
+        "bounce": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.5,
+              "description": "How much of the speed a thing hits something with it bounces back with; 0 stops it dead.",
+              "default": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How much of the speed a thing hits something with it bounces back with; 0 stops it dead."
         }
       },
       "patternProperties": {
@@ -2788,6 +3352,41 @@
             }
           ],
           "description": "The z of a wall behind the surface: light in the room falls on it too."
+        },
+        "open": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "front",
+                  "back",
+                  "left",
+                  "right"
+                ]
+              },
+              "description": "Sides with no wall (physics): a thing pushed over them falls off, onto a surface below or into the inventory.",
+              "default": []
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Sides with no wall (physics): a thing pushed over them falls off, onto a surface below or into the inventory."
+        },
+        "headroom": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 256,
+              "description": "Physics: how high over the surface the stack in the hand may be lifted; the clearance by default."
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Physics: how high over the surface the stack in the hand may be lifted; the clearance by default."
         }
       },
       "patternProperties": {
@@ -3744,16 +4343,17 @@
               "type": "string",
               "enum": [
                 "up",
-                "front"
+                "front",
+                "camera"
               ],
-              "description": "up: the count lies on the slot; front: it stands at the item's foot facing the front.",
+              "description": "up: the count lies on the slot; front: it stands at the item's foot facing the front; camera: at the item's foot, always turned to the camera like a name tag.",
               "default": "up"
             },
             {
               "type": "null"
             }
           ],
-          "description": "up: the count lies on the slot; front: it stands at the item's foot facing the front."
+          "description": "up: the count lies on the slot; front: it stands at the item's foot facing the front; camera: at the item's foot, always turned to the camera like a name tag."
         }
       },
       "patternProperties": {
@@ -3810,6 +4410,24 @@
             }
           ],
           "description": "Size of the item and of the click zone, pixels."
+        },
+        "count_facing": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "up",
+                "front",
+                "camera"
+              ],
+              "description": "Which way the count faces: up (default), front, camera.",
+              "default": "up"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Which way the count faces: up (default), front, camera."
         }
       },
       "patternProperties": {

@@ -4,6 +4,41 @@ All notable changes to this mod are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-beta.11+1.21.1] - Unreleased
+### Added
+- `placing.physics`: placed items have weight. They fall, tip over, push each other and drop off open edges into the
+  player's inventory.
+- With placing physics, items dragged or turned by hand move as solid things: a stone block shoves an apple aside, an apple
+  hardly moves the block.
+- `placing.counts`: the count of a placed stack written beside it (`always`, `hover` or `never`).
+- Station orientation `BLOCK_OPPOSITE`, for blocks whose facing names their back.
+- `StationView.setSurfaceTransform`, `setPlacingVisible` and `setSurfaceVisible`: shelves move and hide with a drawer or a door.
+- `StationView.mirrorCamera(x)`: the station's camera mirrored, for blocks that come in a left and a right hand.
+- `StationView.hasRoomFor(stack)`. Items brought in without a place stand on the first free spot of a surface.
+- `placing.frame_pose` and `placing.hover_lift`: 3D items stand upright as modelled, and a hovered item no longer jumps up.
+- `StationBehavior.onKey` and `onChar`: a station takes keys and typed characters, for a search field.
+- `MenuBinding.Builder.alsoAccepts(names)`: a menu station also takes another mod's menu of the same slots, such as
+  [Visual Workbench](https://modrinth.com/mod/visual-workbench)'s crafting table.
+- `count_facing: camera` for slots and outputs, `count_facing` for outputs.
+- [Mouse Tweaks](https://modrinth.com/mod/mouse-tweaks) works at every station as its config sets it.
+- The mouse wheel over a slot with a stack in the hand puts one in or takes one back; the middle drag shares a stack over
+  the slots it crosses.
+
+### Changed
+- Lights in a scene brighten the models around them and flicker slowly and smoothly.
+
+### Fixed
+- At a large render distance the recipe book and the cooking badge of
+  [Hands-On Delight](https://www.curseforge.com/minecraft/mc-mods/hands-on-delight) vanished and clicks could miss.
+- A scene that stands in for its block no longer blinks when the block comes back
+  ([Hands-On Delight #30](https://github.com/Pocky-l/handson-delight/issues/30)).
+- A block a scene stands in for no longer hides the faces of the blocks around it.
+- Counts turned to the camera are no longer cut by a chest, glass or particles next to the station.
+- A resource pack that retextures white concrete no longer shows through the slot highlights.
+- The stack in the hand stays at the front of an upright station, and no longer fills the screen for a frame when taken
+  from the drawer.
+- Many smaller fixes with placing physics.
+
 ## [1.0.0-beta.10+1.21.1] - 2026-11-15
 ### Added
 - Node option `takes_items`: while a stack is on the cursor the node is hovered too and its click goes to `onItemClick`, for

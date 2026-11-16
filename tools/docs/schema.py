@@ -192,7 +192,37 @@ obj("placing", "PlacingOptions", "Free placing: items of a slot group with place
     "shadows": field(BOOL, "Items cast their shape on what they stand on.", True),
     "snap": field(num(0, 16), "Positions are rounded to this many pixels; 0 keeps them.", 0.25),
     "preview_color": field(COLOR, "Colour of the see-through copy of the item in the hand.", "#A0FFFFFF"),
+    "counts": field({"type": "string", "enum": ["always", "hover", "never"]},
+                    "When the count of a stack of more than one is written at its foot.", "never"),
+    "physics": field({"$ref": "#/definitions/placing_physics"},
+                     "Items fall, tip over and push each other; without it they stand exactly as put."),
+    "hover_lift": field(num(0, 4), "Pixels an item rises while the cursor is on it; 0 keeps it still.", 0),
+    "frame_pose": field(BOOL, "Every item stands as an item frame shows it; false: 3D item models stand as they are modelled.", False),
 }, required=["group", "surfaces"])
+
+obj("placing_physics", "PlacingPhysics", "Solid placed items: they fall, tip over and shove each other.", {
+    "gravity": field(num(1, 4000), "How fast things fall, pixels per second squared.", 200),
+    "friction": field(num(0, 1), "How hard a thing grips what it stands on or touches, as a share of its weight.", 0.6),
+    "upright_flat": field(BOOL, "Flat items (icons) stand as turned and rock back when bumped; false: thin cards that fall over.", True),
+    "rock": field(num(0, 45), "Degrees a flat item rocks at most when bumped; 0 keeps it rigidly upright.", 25),
+    "flat_depth": field(num(0, 2), "Pixels of depth a flat item collides with at least; 0: as thin as it is drawn.", 0),
+    "hover": field(num(0, 8), "Pixels the stack in the hand floats over what is under it.", 1.5),
+    "carry_lag": field(num(0, 1), "Seconds the point held takes to close half the way to the cursor; 0 follows at once.", 0.035),
+    "reach": field(num(0, 8), "With hand_pushes: pixels around the stack in the hand within which it rises onto an item.", 4),
+    "climb": field(num(1, 1000), "Pixels per second the stack in the hand rises onto an item it comes near.", 48),
+    "swing": field(BOOL, "The stack in the hand hangs from its top and swings as it is carried; false keeps it upright.", True),
+    "swing_angle": field(num(0, 60), "Degrees the stack in the hand swings out at most.", 12),
+    "swing_calm": field(num(0.1, 2), "Seconds the swing takes to die down once the hand is still.", 0.15),
+    "hop_time": field(num(0, 0.5), "Seconds the stack in the hand takes to hop over to another surface; 0 jumps there at once.", 0.1),
+    "toss": field(num(0, 1), "How much of the hand's speed (and turning) a thing let go of while moving keeps; 0 stops it.", 0),
+    "hand_pushes": field(BOOL, "The stack in the hand is solid and, swept in fast, shoves what it meets; false: it passes things by.",
+                         False),
+    "hand_force": field(num(1000, 10000000), "How hard the hand pulls an item it drags or turns: a heavy thing comes slower, and what does not give way stops it.", 40000),
+    "turn_power": field(num(1, 3), "How much quicker an item turns by hand with physics than placing.turn_speed says.", 1.5),
+    "fall_off": field({"enum": ["held", "any"]}, "What may go over an open edge: only what the hand drags there, or anything.", "any"),
+    "max_speed": field(num(10, 400), "Pixels per second a thing moves at most.", 80),
+    "bounce": field(num(0, 0.5), "How much of the speed a thing hits something with it bounces back with; 0 stops it dead.", 0),
+})
 
 obj("place_surface", "PlaceSurface", "A level surface items can stand on.", {
     "from": field(XZ, "One corner, [x, z]."),
@@ -201,6 +231,9 @@ obj("place_surface", "PlaceSurface", "A level surface items can stand on.", {
     "clearance": field(num(0.5, 256), "Room above it, in pixels.", 64),
     "aim_height": field(num(0, 256), "0: the cursor points at the surface. Otherwise at a slope up to this height over the back edge.", 0),
     "wall": field(num(), "The z of a wall behind the surface: light in the room falls on it too."),
+    "open": field({"type": "array", "items": {"enum": ["front", "back", "left", "right"]}},
+                  "Sides with no wall (physics): a thing pushed over them falls off, onto a surface below or into the inventory.", []),
+    "headroom": field(num(0, 256), "Physics: how high over the surface the stack in the hand may be lifted; the clearance by default."),
 }, required=["from", "to", "height"])
 
 obj("camera_shot", "CameraShot", "Another view of the scene, in the rig's coordinates.", {
@@ -322,14 +355,17 @@ obj("slot", "SlotBinding", "A place for an item of a station slot; clicked like 
     "counts": field({"type": "string", "enum": ["always", "hover", "never"]},
                     "When the stack's count is drawn; hover keeps slots close together readable.", "always"),
     "highlight": field(BOOL, "The square over the slot under the cursor; off for things that are no slots to the eye.", True),
-    "count_facing": field({"type": "string", "enum": ["up", "front"]},
-                          "up: the count lies on the slot; front: it stands at the item's foot facing the front.", "up"),
+    "count_facing": field({"type": "string", "enum": ["up", "front", "camera"]},
+                          "up: the count lies on the slot; front: it stands at the item's foot facing the front; camera: at the"
+                          " item's foot, always turned to the camera like a name tag.", "up"),
 }, required=["slot"])
 
 obj("output", "OutputBinding", "Shows a result the station logic computes; clicking takes it.", {
     "output": field(STRING, "The station output's name."),
     "display": field(DISPLAY, "How the result is shown.", "floating"),
     "size": field(num(1, 64), "Size of the item and of the click zone, pixels.", 8),
+    "count_facing": field({"type": "string", "enum": ["up", "front", "camera"]},
+                          "Which way the count faces: up (default), front, camera.", "up"),
 }, required=["output"])
 
 obj("control", "ControlBinding",

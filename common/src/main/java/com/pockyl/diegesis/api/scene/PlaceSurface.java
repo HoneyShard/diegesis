@@ -2,6 +2,7 @@ package com.pockyl.diegesis.api.scene;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
+import net.minecraft.util.StringRepresentable;
 import org.joml.Vector2f;
 import org.joml.Vector2fc;
 
@@ -9,6 +10,7 @@ import com.pockyl.diegesis.impl.codec.StrictCodecs;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * A level surface items can stand on.
@@ -22,8 +24,27 @@ import java.util.Optional;
  *                  from the front edge (the side of the smaller z) up to this height over the back edge, so that low in
  *                  the opening means at the front and high in the opening means at the back
  * @param wall      the z of a wall behind the surface: light in the room falls on it too
+ * @param open      the sides with no wall, for {@code placing.physics}: a thing pushed over such an edge falls off, onto a
+ *                  surface below or, with none there, out of the station into its player's inventory. Every side has a wall
+ *                  by default
+ * @param headroom  with {@code placing.physics}: how high over the surface the stack in the hand may be lifted to pass over
+ *                  what stands there (and things stacked); {@link #clearance} when not given. More than the clearance where
+ *                  open air is over the surface (a drawer pulled out), less to keep the hand low
  */
-public record PlaceSurface(Vector2fc from, Vector2fc to, float height, float clearance, float aimHeight, Optional<Float> wall) {
+public record PlaceSurface(Vector2fc from, Vector2fc to, float height, float clearance, float aimHeight, Optional<Float> wall,
+        Set<Side> open, Optional<Float> headroom) {
+    /** A side of a surface, as the scene's front (-z) sees it: left is +x, the viewer's left. */
+    public enum Side implements StringRepresentable {
+        FRONT, BACK, LEFT, RIGHT;
+
+        public static final Codec<Side> CODEC = StringRepresentable.fromEnum(Side::values);
+
+        @Override
+        public String getSerializedName() {
+            return name().toLowerCase(java.util.Locale.ROOT);
+        }
+    }
+
     private static final Codec<Vector2fc> XZ = Codec.FLOAT.listOf().comapFlatMap(
             list -> list.size() == 2 ? DataResult.success((Vector2fc) new Vector2f(list.get(0), list.get(1)))
                     : DataResult.error(() -> "Expected [x, z], got " + list),
@@ -35,10 +56,29 @@ public record PlaceSurface(Vector2fc from, Vector2fc to, float height, float cle
             Codec.FLOAT.fieldOf("height").forGetter(PlaceSurface::height),
             StrictCodecs.optional(Codec.floatRange(0.5F, 256.0F), "clearance", 64.0F).forGetter(PlaceSurface::clearance),
             StrictCodecs.optional(Codec.floatRange(0.0F, 256.0F), "aim_height", 0.0F).forGetter(PlaceSurface::aimHeight),
-            StrictCodecs.optional(Codec.FLOAT, "wall").forGetter(PlaceSurface::wall)
+            StrictCodecs.optional(Codec.FLOAT, "wall").forGetter(PlaceSurface::wall),
+            StrictCodecs.optional(Side.CODEC.listOf().<Set<Side>>xmap(Set::copyOf, List::copyOf), "open", Set.<Side>of())
+                    .forGetter(PlaceSurface::open),
+            StrictCodecs.optional(Codec.floatRange(0.0F, 256.0F), "headroom").forGetter(PlaceSurface::headroom)
     ).apply(instance, PlaceSurface::new));
 
+    /** A surface walled on every side. */
+    public PlaceSurface(Vector2fc from, Vector2fc to, float height, float clearance, float aimHeight, Optional<Float> wall) {
+        this(from, to, height, clearance, aimHeight, wall, Set.of());
+    }
+
+    /** A surface with the hand's headroom its clearance. */
+    public PlaceSurface(Vector2fc from, Vector2fc to, float height, float clearance, float aimHeight, Optional<Float> wall, Set<Side> open) {
+        this(from, to, height, clearance, aimHeight, wall, open, Optional.empty());
+    }
+
+    /** How high over the surface the stack in the hand may be lifted ({@link #headroom}, else the clearance). */
+    public float liftRoom() {
+        return headroom.orElse(clearance);
+    }
+
     public PlaceSurface {
+        open = open.isEmpty() ? Set.of() : java.util.Collections.unmodifiableSet(java.util.EnumSet.copyOf(open));
         Vector2f low = new Vector2f(Math.min(from.x(), to.x()), Math.min(from.y(), to.y()));
         Vector2f high = new Vector2f(Math.max(from.x(), to.x()), Math.max(from.y(), to.y()));
         from = low;

@@ -34,6 +34,15 @@ public final class SceneInstance {
     private final Map<String, NodeInstance> byId = new LinkedHashMap<>();
     /** One node per slot of the placing's group: a scene file does not know the items that will stand there. */
     private final List<NodeInstance> placed = new ArrayList<>();
+    /** Per surface of the placing, how what stands on it is moved now (identity: where the scene has it). */
+    private Matrix4f[] surfaceMoves = new Matrix4f[0];
+    /** Solid items of the placing ({@code placing.physics}); null without. */
+    private PlacedPhysics physics;
+    /** Whether the placing's items are drawn (see {@code StationView.setPlacingVisible}). */
+    private boolean placingVisible = true;
+    /** Per surface of the placing, whether it is shut away (see {@code StationView.setSurfaceVisible}). */
+    private boolean[] surfaceHidden = new boolean[0];
+    private PlacingOptions placingOptions;
     /** Station-space matrices of the 36 inventory slots laid out in the scene; null without a layout. */
     private final Matrix4f[] inventorySlots;
 
@@ -55,16 +64,137 @@ public final class SceneInstance {
             DiegesisMod.LOGGER.error("Station {}: \"placing\" needs a slot group \"{}\" with placed() rules", station.type().id(), options.group());
             return;
         }
+        placingOptions = options;
+        surfaceMoves = new Matrix4f[options.surfaces().size()];
+        surfaceHidden = new boolean[options.surfaces().size()];
+        for (int i = 0; i < surfaceMoves.length; i++) {
+            surfaceMoves[i] = new Matrix4f();
+        }
         for (int i = 0; i < group.size(); i++) {
             NodeDefinition node = NodeDefinition.builder("placed_" + i)
                     .slot(new SlotBinding(group.ref(i), SlotBinding.ItemDisplay.UPRIGHT, 6.0F, java.util.Optional.empty(), SlotBinding.Counts.ALWAYS, true))
                     .light(new LightDefinition(0, options.lightRadius(), options.lightColor(), 0.12F, new Vector3f())).hidden().build();
             NodeInstance instance = new NodeInstance(this, node, null);
-            instance.setPlaced(new PlacedItem(group.ref(i), options));
+            instance.setPlaced(new PlacedItem(group.ref(i), options, surfaceMoves, surfaceHidden, new PlacedItem.Spots() {
+                @Override
+                public com.pockyl.diegesis.api.state.ItemPose find(PlacedItem item, PlacedShape shape) {
+                    return freeSpot(item, shape);
+                }
+
+                @Override
+                public com.pockyl.diegesis.api.scene.PlaceSurface surfaceOf(PlacingOptions placing, com.pockyl.diegesis.api.state.ItemPose pose) {
+                    return SceneInstance.this.surfaceOf(placing, pose);
+                }
+            }));
             placed.add(instance);
             roots.add(instance);
             index(instance);
         }
+        options.physics().ifPresent(value -> physics = new PlacedPhysics(this, options, value, List.copyOf(placed)));
+    }
+
+    /**
+     * A free spot for an item that came without a place, among the items standing on the surfaces shown now (on any surface when
+     * all are shut away); with no room left, the old rows by slot number, so that it is still somewhere.
+     */
+    private com.pockyl.diegesis.api.state.ItemPose freeSpot(PlacedItem item, PlacedShape shape) {
+        com.pockyl.diegesis.api.state.ItemPose spot = freeSpot(shape, item);
+        return spot != null ? spot : Placing.fallback(placingOptions, item.slot().index(), shape, surfaceHidden);
+    }
+
+    private com.pockyl.diegesis.api.state.ItemPose freeSpot(PlacedShape shape, PlacedItem except) {
+        PlacingOptions options = placingOptions;
+        List<com.pockyl.diegesis.api.scene.PlaceSurface> open = new ArrayList<>();
+        for (int i = 0; i < options.surfaces().size(); i++) {
+            if (isSurfaceVisible(i)) {
+                open.add(options.surfaces().get(i));
+            }
+        }
+        if (open.isEmpty()) {
+            open = options.surfaces();
+        }
+        float least = options.physics().filter(com.pockyl.diegesis.api.scene.PlacingPhysics::uprightFlat)
+                .map(value -> value.flatDepth() * 0.5F).orElse(0.0F);
+        List<float[]> taken = new ArrayList<>();
+        for (NodeInstance node : placed) {
+            PlacedItem other = node.placed();
+            com.pockyl.diegesis.api.state.ItemPose pose = other.pose();
+            if (other != except && pose != null && other.shape() != null) {
+                taken.add(Placing.boxOf(options, other.shape(), pose, other.shape().isFlat() ? least : 0.0F));
+            }
+        }
+        float own = shape.isFlat() ? least : 0.0F;
+        return Placing.freeSpot(options, shape, open, taken, own);
+    }
+
+    /** Whether the placing has room for {@code stack} somewhere on its surfaces shown now (see {@code StationView.hasRoomFor}). */
+    public boolean hasRoomFor(net.minecraft.world.item.ItemStack stack) {
+        if (placingOptions == null || stack.isEmpty()) {
+            return false;
+        }
+        PlacedShape shape = PlacedShape.of(stack, net.minecraft.client.Minecraft.getInstance().level, placingOptions.blockModels(),
+                placingOptions.framePose());
+        return freeSpot(shape, null) != null;
+    }
+
+    /** The placing's physics, or null. */
+    public PlacedPhysics physics() {
+        return physics;
+    }
+
+    public void setPlacingVisible(boolean visible) {
+        placingVisible = visible;
+    }
+
+    public boolean isPlacingVisible() {
+        return placingVisible;
+    }
+
+    public void setSurfaceVisible(int surface, boolean visible) {
+        if (surface >= 0 && surface < surfaceHidden.length) {
+            surfaceHidden[surface] = !visible;
+        }
+    }
+
+    /** Whether surface {@code index} of the placing is shown and takes items. */
+    public boolean isSurfaceVisible(int index) {
+        return index < 0 || index >= surfaceHidden.length || !surfaceHidden[index];
+    }
+
+    /** Moves what stands on a surface of the placing (see {@code StationView.setSurfaceTransform}). */
+    public void setSurfaceTransform(int surface, org.joml.Matrix4fc transform) {
+        if (surface >= 0 && surface < surfaceMoves.length) {
+            surfaceMoves[surface].set(transform);
+        }
+    }
+
+    /** How surface {@code index} of the placing is moved now (a door it is on swung open), or null while it stays put. */
+    public Matrix4f surfaceMove(int index) {
+        if (index < 0 || index >= surfaceMoves.length) {
+            return null;
+        }
+        Matrix4f move = surfaceMoves[index];
+        return (move.properties() & org.joml.Matrix4fc.PROPERTY_IDENTITY) != 0 ? null : move;
+    }
+
+    /** The surface an item standing at {@code pose} belongs to: on another item, that one's (see {@code Placing.surfaceOf}). */
+    public com.pockyl.diegesis.api.scene.PlaceSurface surfaceOf(PlacingOptions options, com.pockyl.diegesis.api.state.ItemPose pose) {
+        return Placing.surfaceOf(options, pose, index -> index >= 0 && index < placed.size() ? placed.get(index).placed().pose() : null);
+    }
+
+    /** The move of the surface an item standing at {@code pose} belongs to, or null. */
+    public Matrix4f surfaceMoveOf(PlacingOptions options, com.pockyl.diegesis.api.state.ItemPose pose) {
+        com.pockyl.diegesis.api.scene.PlaceSurface surface = surfaceOf(options, pose);
+        return surface == null ? null : surfaceMove(options.surfaces().indexOf(surface));
+    }
+
+    private boolean onShownSurface(PlacedItem item) {
+        com.pockyl.diegesis.api.state.ItemPose pose = item.pose();
+        if (pose == null) {
+            return true;
+        }
+        com.pockyl.diegesis.api.scene.PlaceSurface surface = surfaceOf(item.options(), pose);
+        return surface == null || isSurfaceVisible(item.options().surfaces().indexOf(surface));
     }
 
     /** The nodes of the placing's slots, also those that are empty now. */
@@ -153,8 +283,11 @@ public final class SceneInstance {
         }
         for (NodeInstance node : placed) {
             boolean there = node.placed().sync(state);
-            node.setVisible(there);
+            node.setVisible(there && placingVisible && onShownSurface(node.placed()));
             node.setLight(there && node.placed().options().itemLight() ? node.placed().shape().light() : 0);
+        }
+        if (physics != null) {
+            physics.update(state, dt);
         }
         for (NodeInstance root : roots) {
             root.update(dt);

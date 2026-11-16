@@ -23,6 +23,7 @@ import com.pockyl.diegesis.api.scene.Grabbable;
 import com.pockyl.diegesis.api.scene.InterfaceOptions;
 import com.pockyl.diegesis.api.scene.InventoryDrawer;
 import com.pockyl.diegesis.api.scene.InventoryLayout;
+import com.pockyl.diegesis.api.scene.PlaceSurface;
 import com.pockyl.diegesis.api.scene.PlacingOptions;
 import com.pockyl.diegesis.api.scene.SlotBinding;
 import com.pockyl.diegesis.api.scene.TankBinding;
@@ -42,6 +43,7 @@ import com.pockyl.diegesis.impl.action.StationAction.Target;
 import com.pockyl.diegesis.impl.client.ClientStation;
 import com.pockyl.diegesis.impl.client.DiegesisClientRuntime;
 import com.pockyl.diegesis.impl.client.anim.Easing;
+import com.pockyl.diegesis.impl.client.scene.Placing;
 import com.pockyl.diegesis.impl.client.anim.Spring;
 import com.pockyl.diegesis.impl.client.fx.PourStreams;
 import com.pockyl.diegesis.impl.client.scene.NodeInstance;
@@ -77,6 +79,8 @@ public final class FocusInput {
     private static final float FAR_LIMIT = 128.0F;
     /** How high (pixels) a carried item floats over the work surface, and over a slot it sticks to. */
     private static final float STICK_HEIGHT = 1.4F;
+    /** The held stack as carry planes see it: no node, so only planes for every carried thing lift it. */
+    private static final String HELD_STACK = "";
     /** Nearer to the camera than this (pixels) the stack in the hand would fill the screen: there it is an icon at the cursor. */
     private static final float NEAREST_CARRY = 22.0F;
     /** Shorter and stiller than this, a press on an object is a click: the object stays in the hand. */
@@ -98,6 +102,16 @@ public final class FocusInput {
     // Vanilla-style click state.
     private final List<Target> spreadTargets = new ArrayList<>();
     private int spreadButton = -1;
+    /** The spread's kind for vanilla's creative middle drag (a full stack into each slot), and the mouse button that holds it. */
+    private static final int CLONE_SPREAD = 2;
+    /** A Mouse Tweaks drag in progress ({@link MouseTweaksMode}), and the slot it acted on last (null off every slot). */
+    private static final int TWEAK_NONE = 0;
+    private static final int TWEAK_RMB = 1;
+    private static final int TWEAK_GATHER = 2;
+    private static final int TWEAK_MOVE = 3;
+    private int tweak = TWEAK_NONE;
+    private Target tweakLast;
+    private int spreadMouseButton = -1;
     private Target lastClicked;
     private int lastButton;
     private long lastClickTime;
@@ -108,6 +122,8 @@ public final class FocusInput {
     private final Vector3f lean = new Vector3f();
     private boolean carryInWorld;
     private boolean carryPlaced;
+    /** Last frame the stack was carried as an icon on the screen, not in the scene. */
+    private boolean carriedAsIcon;
     private float carrySize = 4.5F;
     private long lastFrame = Util.getNanos();
     private float frameDt;
@@ -180,6 +196,7 @@ public final class FocusInput {
         if (station == null || carried.isEmpty() || spreadTargets.size() < 2) {
             return -1;
         }
+        // A middle drag too: vanilla counts every full stack it puts down against the hand, which is then empty.
         int left = carried.getCount();
         for (Target target : spreadTargets) {
             ItemStack there = itemAt(station, target);
@@ -190,6 +207,9 @@ public final class FocusInput {
     }
 
     private int spreadEach(ItemStack carried) {
+        if (spreadButton == CLONE_SPREAD) {
+            return carried.getMaxStackSize();
+        }
         return spreadButton == 1 ? 1 : carried.getCount() / spreadTargets.size();
     }
 
@@ -367,7 +387,12 @@ public final class FocusInput {
         if (station == null || gesture != null || spreadButton >= 0 || inventorySlot == -2) {
             return;
         }
-        if (inventorySlot == -1 && pressOnPlacing(station, x, y, button)) {
+        tweak = TWEAK_NONE;
+        tweakLast = null;
+        if (tweakPress(station, button, shift)) {
+            return;
+        }
+        if (inventorySlot == -1 && pressOnPlacing(station, x, y, button, shift)) {
             return;
         }
         Target target = inventorySlot >= 0 ? new Target.Inventory(inventorySlot) : null;
@@ -451,9 +476,17 @@ public final class FocusInput {
     }
 
     /** With free placing, the left button puts the stack in the hand down; the right one, held, turns it or the item it is on. */
-    private boolean pressOnPlacing(ClientStation station, double x, double y, int button) {
+    private boolean pressOnPlacing(ClientStation station, double x, double y, int button, boolean shift) {
         if (Placer.options(station) == null) {
             return false;
+        }
+        if (carriedStack().isEmpty() && button == 0 && !shift && station.scene().physics() != null) {
+            // With physics the left button held on an item pushes it along the shelf; a click without moving still takes it.
+            NodeInstance pushed = pickAll(station, this::isClickable).node();
+            if (pushed != null && pushed.placed() != null && pushed.placed().pose() != null) {
+                gesture = new Shove(station, pushed, x, y);
+                return true;
+            }
         }
         if (!carriedStack().isEmpty()) {
             if (placer.preview() == null) {
@@ -516,6 +549,7 @@ public final class FocusInput {
         } else {
             // Holding a stack: decide on release whether it was a click on one slot or a drag over several.
             spreadButton = button;
+            spreadMouseButton = button;
             spreadTargets.clear();
             spreadTargets.add(target);
         }
@@ -587,20 +621,214 @@ public final class FocusInput {
         return false;
     }
 
-    /** The pick button over a slot of a menu station: a copy of the stack in creative mode, as in vanilla screens. */
+    /**
+     * The pick button (the middle one) over a slot of any station. With a stack in the hand it starts a drag over slots: in creative
+     * mode at a menu station vanilla's middle drag (every slot crossed gets a full stack), otherwise the stack is shared evenly
+     * over them, as a left drag does (vanilla's survival screen has nothing for it). With an empty hand at a menu station, a copy
+     * of the stack in creative mode, as in vanilla screens.
+     */
     boolean menuPick(int button) {
         ClientStation station = station();
-        if (station == null || station.type().authority() != Authority.MENU || gesture != null
-                || !Minecraft.getInstance().options.keyPickItem.matchesMouse(button)) {
+        if (station == null || gesture != null || !Minecraft.getInstance().options.keyPickItem.matchesMouse(button)) {
             return false;
         }
-        Target target = hoveredInventory >= 0 ? new Target.Inventory(hoveredInventory)
-                : hovered != null ? itemTarget(station, hovered.definition()) : null;
-        if (target == null || itemAt(station, target).isEmpty()) {
+        Target target = targetUnderCursor(station);
+        boolean menu = station.type().authority() == Authority.MENU;
+        if (target != null && !(target instanceof Target.Output) && !carriedStack().isEmpty() && spreadButton < 0) {
+            ItemStack there = itemAt(station, target);
+            if (there.isEmpty() || ItemStack.isSameItemSameComponents(there, carriedStack())) {
+                boolean creative = Minecraft.getInstance().player != null && Minecraft.getInstance().player.getAbilities().instabuild;
+                spreadButton = menu && creative ? CLONE_SPREAD : 0;
+                spreadMouseButton = button;
+                spreadTargets.clear();
+                spreadTargets.add(target);
+                return true;
+            }
+        }
+        if (!menu || target == null || itemAt(station, target).isEmpty()) {
             return false;
         }
         com.pockyl.diegesis.impl.client.menu.MenuSession.get().click(station, target, 2, net.minecraft.world.inventory.ClickType.CLONE);
         return true;
+    }
+
+    /**
+     * The wheel over a slot with a stack in the hand, at any station: down puts one of it into the slot (a right click), up takes
+     * one of the same back from the slot into the hand. Vanilla has no click that takes one onto a held stack, so that is plain
+     * clicks through an empty inventory slot: the held stack is laid there, the slot's stack picked up, one of it added to the
+     * laid one, the rest put back, and the laid stack, one bigger, picked up again. Nothing without an empty slot.
+     */
+    private boolean wheelWithStack(ClientStation station, double amount) {
+        Target target = targetUnderCursor(station);
+        ItemStack carried = carriedStack();
+        if (target == null || target instanceof Target.Output) {
+            return false;
+        }
+        ItemStack there = itemAt(station, target);
+        boolean same = !there.isEmpty() && ItemStack.isSameItemSameComponents(there, carried);
+        if (amount < 0.0) {
+            if ((there.isEmpty() || same && there.getCount() < there.getMaxStackSize())
+                    && station.perform(new StationAction.Click(target, 1, ClickKind.PICKUP))) {
+                UiSounds.putDown(station.pos().getCenter());
+            }
+            return true;
+        }
+        if (!same || carried.getCount() >= carried.getMaxStackSize()) {
+            return true;
+        }
+        Target spare = emptyInventorySlot(target);
+        if (spare == null) {
+            return true;
+        }
+        int left = there.getCount() - 1;
+        if (!station.perform(new StationAction.Click(spare, 0, ClickKind.PICKUP))) {
+            return true;
+        }
+        if (!station.perform(new StationAction.Click(target, 0, ClickKind.PICKUP))) {
+            // The slot gave nothing: the laid stack goes back into the hand, as it was.
+            station.perform(new StationAction.Click(spare, 0, ClickKind.PICKUP));
+            return true;
+        }
+        station.perform(new StationAction.Click(spare, 1, ClickKind.PICKUP));
+        if (left > 0) {
+            station.perform(new StationAction.Click(target, 0, ClickKind.PICKUP));
+        }
+        if (station.perform(new StationAction.Click(spare, 0, ClickKind.PICKUP))) {
+            UiSounds.pickUp(station.pos().getCenter());
+        }
+        return true;
+    }
+
+    /** An empty slot of the player's main inventory other than {@code not}, as a click target; null when there is none. */
+    private static Target emptyInventorySlot(Target not) {
+        var player = Minecraft.getInstance().player;
+        if (player == null) {
+            return null;
+        }
+        for (int i = 0; i < 36; i++) {
+            Target slot = new Target.Inventory(i);
+            if (!slot.equals(not) && player.getInventory().getItem(i).isEmpty()) {
+                return slot;
+            }
+        }
+        return null;
+    }
+
+    /** The slot under the cursor now, as a press picks it: the hover of the last frame may be another slot's. */
+    private Target targetUnderCursor(ClientStation station) {
+        Target target = hoveredInventory >= 0 ? new Target.Inventory(hoveredInventory) : null;
+        if (target == null && hoveredInventory == -1) {
+            Picked picked = pickAll(station, candidate -> isClickable(candidate) && itemTarget(station, candidate.definition()) != null);
+            target = picked.inventorySlot() >= 0 ? new Target.Inventory(picked.inventorySlot())
+                    : picked.node() == null ? null : itemTarget(station, picked.node().definition());
+        }
+        return target;
+    }
+
+    /**
+     * Mouse Tweaks' press, when it is installed: a right press with a stack puts one at once (the drag puts one into every slot it
+     * passes); Shift and a left press with an empty hand shift-click this slot as usual, and every slot the drag passes after; a
+     * left press with an empty hand picks the stack up as usual, and the drag gathers the same items. True when the press is done.
+     */
+    private boolean tweakPress(ClientStation station, int button, boolean shift) {
+        boolean holding = !carriedStack().isEmpty();
+        if (button == 1 && holding && !shift && MouseTweaksMode.rmb()) {
+            // The behaviour has the stack first, as without Mouse Tweaks: a bowl dipped into soup or the book's page in front
+            // of a slot must not put one into the slot behind.
+            if (hoveredInventory == -1 && offerCarried(station, button, false)) {
+                return true;
+            }
+            Target target = targetUnderCursor(station);
+            if (target == null || target instanceof Target.Output) {
+                return false;
+            }
+            tweak = TWEAK_RMB;
+            tweakLast = target;
+            // A click of its own: the next left click on the slot clicked before it is no double click.
+            lastClicked = target;
+            lastButton = button;
+            lastClickTime = Util.getMillis();
+            putOne(station, target);
+            return true;
+        }
+        if (button == 0 && !holding && shift && MouseTweaksMode.lmbWithoutItem()) {
+            tweak = TWEAK_MOVE;
+            tweakLast = targetUnderCursor(station);
+        } else if (button == 0 && !holding && !shift && MouseTweaksMode.lmbWithItem()) {
+            tweak = TWEAK_GATHER;
+            tweakLast = targetUnderCursor(station);
+        }
+        return false;
+    }
+
+    /** A Mouse Tweaks drag reaching another slot. */
+    private void tweakDrag(ClientStation station) {
+        Target target = targetUnderCursor(station);
+        if (target == null) {
+            // Off every slot: coming back to the last one counts again, as in Mouse Tweaks.
+            tweakLast = null;
+            return;
+        }
+        if (target.equals(tweakLast) || target instanceof Target.Output) {
+            return;
+        }
+        tweakLast = target;
+        ItemStack carried = carriedStack();
+        ItemStack there = itemAt(station, target);
+        switch (tweak) {
+            case TWEAK_RMB -> {
+                if (!carried.isEmpty()) {
+                    putOne(station, target);
+                }
+            }
+            case TWEAK_MOVE -> {
+                if (!there.isEmpty()) {
+                    shiftClick(station, target);
+                }
+            }
+            case TWEAK_GATHER -> {
+                if (carried.isEmpty() || there.isEmpty() || !ItemStack.isSameItemSameComponents(there, carried)) {
+                    return;
+                }
+                // Gathering replaces carrying the stack over to drop it: nothing is let go where the drag ends.
+                dragFrom = null;
+                if (hasShiftDown()) {
+                    shiftClick(station, target);
+                } else if (there.getCount() + carried.getCount() <= carried.getMaxStackSize()) {
+                    // Laid onto the slot's stack and the whole picked up: the hand holds both.
+                    station.perform(new StationAction.Click(target, 0, ClickKind.PICKUP));
+                    if (station.perform(new StationAction.Click(target, 0, ClickKind.PICKUP))) {
+                        UiSounds.pickUp(station.pos().getCenter());
+                    }
+                }
+            }
+            default -> {
+            }
+        }
+    }
+
+    /** One of the held stack into a slot that takes it (empty, or the same item not full), as a right click puts it. */
+    private void putOne(ClientStation station, Target target) {
+        ItemStack carried = carriedStack();
+        ItemStack there = itemAt(station, target);
+        boolean takes = there.isEmpty() || ItemStack.isSameItemSameComponents(there, carried) && there.getCount() < there.getMaxStackSize();
+        if (takes && station.perform(new StationAction.Click(target, 1, ClickKind.PICKUP))) {
+            UiSounds.putDown(station.pos().getCenter());
+        }
+    }
+
+    /** A shift-click on a slot, as a press makes it (the station may take an inventory stack its own way). */
+    private void shiftClick(ClientStation station, Target target) {
+        if (target instanceof Target.Inventory inventory && station.inventoryShiftClick(inventory.index(), itemAt(station, target))) {
+            return;
+        }
+        if (station.perform(new StationAction.Click(target, 0, ClickKind.QUICK_MOVE))) {
+            UiSounds.pickUp(station.pos().getCenter());
+        }
+    }
+
+    private static boolean hasShiftDown() {
+        return net.minecraft.client.gui.screens.Screen.hasShiftDown();
     }
 
     void drag(double x, double y, int inventorySlot) {
@@ -611,6 +839,10 @@ public final class FocusInput {
         }
         if (gesture != null) {
             gesture.drag(x, y);
+            return;
+        }
+        if (tweak != TWEAK_NONE && spreadButton < 0) {
+            tweakDrag(station);
             return;
         }
         if (spreadButton < 0) {
@@ -626,7 +858,8 @@ public final class FocusInput {
             }
         }
         ItemStack carried = carriedStack();
-        if (target == null || spreadTargets.contains(target) || carried.getCount() <= spreadTargets.size()) {
+        if (target == null || target instanceof Target.Output || spreadTargets.contains(target)
+                || spreadButton != CLONE_SPREAD && carried.getCount() <= spreadTargets.size()) {
             return;
         }
         ItemStack there = itemAt(station, target);
@@ -638,6 +871,14 @@ public final class FocusInput {
     void release(double x, double y, int button, int inventorySlot) {
         mouseMoved(x, y, inventorySlot);
         ClientStation station = station();
+        if (tweak != TWEAK_NONE) {
+            boolean done = tweak == TWEAK_RMB || tweak == TWEAK_MOVE;
+            tweak = TWEAK_NONE;
+            tweakLast = null;
+            if (done && gesture == null) {
+                return;
+            }
+        }
         if (gesture != null) {
             if (gesture instanceof NodeGrab grab && grab.keepAfterRelease(x, y)) {
                 return;
@@ -648,7 +889,16 @@ public final class FocusInput {
         if (station != null && dragFrom != null && button == dragButton) {
             dropDragged(station, x, y, inventorySlot);
         }
-        if (station == null || spreadButton < 0 || button != spreadButton) {
+        if (station == null || spreadButton < 0 || button != spreadMouseButton) {
+            return;
+        }
+        if (spreadMouseButton != 0 && spreadMouseButton != 1) {
+            // The middle button. One slot is no drag: vanilla does nothing for a middle click with a stack in the hand.
+            if (spreadTargets.size() > 1 && station.perform(new StationAction.Spread(spreadTargets, spreadButton))) {
+                UiSounds.putDown(station.pos().getCenter());
+            }
+            spreadTargets.clear();
+            spreadButton = -1;
             return;
         }
         if (spreadTargets.size() > 1) {
@@ -706,6 +956,20 @@ public final class FocusInput {
             grab.scroll(amount);
             return;
         }
+        boolean offered = false;
+        if (station != null && gesture == null && spreadButton < 0 && !carriedStack().isEmpty() && amount != 0.0) {
+            // The behaviour has the wheel first, as before the wheel moved items: a recipe book scrolled with a stack in the
+            // hand must not put one into a slot behind it.
+            if (hoveredInventory == -1) {
+                offered = true;
+                if (station.scroll(hovered != null ? hovered.id() : null, amount)) {
+                    return;
+                }
+            }
+            if (wheelWithStack(station, amount)) {
+                return;
+            }
+        }
         if (station != null && gesture == null && station.type().authority() == Authority.MENU) {
             Target under = hoveredInventory >= 0 ? new Target.Inventory(hoveredInventory)
                     : hovered != null ? itemTarget(station, hovered.definition()) : null;
@@ -717,7 +981,7 @@ public final class FocusInput {
         if (station == null || gesture != null || hoveredInventory != -1) {
             return;
         }
-        if (station.scroll(hovered != null ? hovered.id() : null, amount)) {
+        if (!offered && station.scroll(hovered != null ? hovered.id() : null, amount)) {
             return;
         }
         if (scrollOnPlacing(station, amount)) {
@@ -888,22 +1152,35 @@ public final class FocusInput {
     /** The carried stack follows the cursor over the surface, leans as it moves and sticks to the slot under it. */
     private void updateCarry(ClientStation station, float dt, boolean carrying) {
         boolean overWorld = hoveredInventory == -1 && FocusScreen.isOverWorld(mouseX, mouseY);
-        placer.update(station, stationRay(station, mouseX, mouseY), carriedStack(), overWorld, gesture instanceof Turn);
+        placer.update(station, stationRay(station, mouseX, mouseY), carriedStack(), overWorld, gesture instanceof Turn, dt);
         if (!carrying) {
             carryPlaced = false;
             carryInWorld = false;
+            carriedAsIcon = false;
             return;
         }
         ItemPose preview = placer.preview();
-        float plane = station.scene().definition().workPlane();
         InterfaceOptions options = station.scene().definition().ui();
         boolean overSlot = options.carryStick() && hovered != null && hovered.definition().slot().isPresent();
         boolean overInventory = options.carryStick() && sceneInventory >= 0;
-        Vector3f onSurface = onPlane(stationRay(station, mouseX, mouseY), plane + options.carryLift(), options);
+        // Over the work surface, raised by the carry planes that apply to every carried thing: an upright station (a furnace)
+        // puts one over its block, so the stack stays at its front instead of following the floor far behind it.
+        Vector3f onSurface = onCarrySurface(stationRay(station, mouseX, mouseY), station.scene().definition(), HELD_STACK,
+                options.carryLift());
         // Over a slot it settles just off the slot's surface - above a table top, in front of an upright face.
-        if (preview != null) {
+        if (preview != null && placer.hopPosition() != null) {
+            // Hopping over to another surface: where the hop has it.
+            carryTarget.set(placer.hopPosition());
+            carry.setHalfLife(0.004F);
+        } else if (preview != null) {
             carryTarget.set(preview.x(), preview.y() + preview.lift(), preview.z());
-            carry.setHalfLife(0.02F);
+            org.joml.Matrix4f move = station.scene().surfaceMoveOf(Placer.options(station), preview);
+            if (move != null) {
+                // On a surface that is moved (a door's shelf swung open): where that surface is now.
+                move.transformPosition(carryTarget);
+            }
+            // With physics the placer gives it its weight already.
+            carry.setHalfLife(placer.glides() ? 0.004F : 0.02F);
         } else if (overSlot) {
             carryTarget.set(hovered.matrix().transformPosition(new Vector3f(0.0F, STICK_HEIGHT, 0.0F)));
             carrySize = hovered.definition().slot().get().shownItemSize();
@@ -925,10 +1202,14 @@ public final class FocusInput {
         boolean inAir = onSurface != null && Placer.options(station) == null
                 && onSurface.distance(stationRay(station, mouseX, mouseY).origin) >= NEAREST_CARRY;
         carryInWorld = overWorld && (preview != null || overSlot || overInventory || sceneInventory >= 0 || inAir);
-        if (!carryPlaced) {
+        // A stack that was an icon on the screen (over the drawer) comes into the scene where it is wanted, not from the point
+        // its pose was following meanwhile: low on the screen that point lies right in front of the camera, and for one frame
+        // the stack filled the screen.
+        if (!carryPlaced || carryInWorld && carriedAsIcon) {
             carry.snap(carryTarget);
             carryPlaced = true;
         }
+        carriedAsIcon = !carryInWorld;
         carry.update(carryTarget, dt);
         Vector3fc velocity = carry.velocity();
         // Leans into the movement like something held between two fingers, and keeps a slow sway.
@@ -1291,6 +1572,116 @@ public final class FocusInput {
         Presence presence();
     }
 
+    /**
+     * The left button held on a placed item, with physics: moved, the item slides along its own surface under the cursor as a
+     * solid thing and shoves what is in its way; pressed into a wall at a slant it turns flat against it; let go, it settles as
+     * it may. The cursor past the surface's edge keeps it on that surface: it never jumps to a shelf or drawer behind. Released
+     * without moving it is a click: the item is taken.
+     */
+    private final class Shove implements Gesture {
+        /** GUI pixels the cursor moves before a press becomes a push. */
+        private static final double START = 3.0;
+        /** Seconds the item takes to cover half the way to the cursor: it follows the hand closely, not in jumps. */
+        private static final float FOLLOW = 0.03F;
+        /** Pixels the hand may press the item's middle towards a wall: its corners go in, and the wall turns it flat. */
+        private static final float PRESS = 0.5F;
+        private final ClientStation station;
+        private final NodeInstance node;
+        private final double startX;
+        private final double startY;
+        private boolean moving;
+        private long lastFrame = Util.getNanos();
+        /** The surface it slides on, from the start of the push. */
+        private PlaceSurface surface;
+
+        Shove(ClientStation station, NodeInstance node, double x, double y) {
+            this.station = station;
+            this.node = node;
+            startX = x;
+            startY = y;
+        }
+
+        private int index() {
+            return node.placed().slot().index();
+        }
+
+        @Override
+        public void drag(double x, double y) {
+            if (!moving && Math.hypot(x - startX, y - startY) >= START) {
+                moving = true;
+                station.scene().physics().hold(index());
+                UiSounds.grab(node.worldPosition());
+            }
+        }
+
+        @Override
+        public void frame() {
+            long now = Util.getNanos();
+            float dt = Math.min((now - lastFrame) / 1.0e9F, 0.1F);
+            lastFrame = now;
+            ItemPose pose = node.placed().pose();
+            if (!moving || pose == null) {
+                return;
+            }
+            PlacingOptions options = Placer.options(station);
+            if (surface == null) {
+                surface = station.scene().surfaceOf(options, pose);
+                if (surface == null) {
+                    return;
+                }
+            }
+            StationRay ray = stationRay(station, mouseX, mouseY);
+            // On its own surface's plane, wherever the cursor is: past the edge it does not drop to what lies behind.
+            Placing.Aim aim = Placing.aimOn(options, surface, ray.origin(), ray.direction(), station.scene());
+            if (aim == null) {
+                return;
+            }
+            // With physics the hand pulls it there with its force and the item comes as its weight lets it; without, it follows.
+            boolean weighed = options.physics().isPresent();
+            float x = weighed ? aim.x() : Easing.approach(pose.x(), aim.x(), FOLLOW, dt);
+            float z = weighed ? aim.z() : Easing.approach(pose.z(), aim.z(), FOLLOW, dt);
+            ItemPose moved = Placing.standing(options, node.placed().shape(), surface, x, surface.height(), z, pose.rotation(), pose.scale(), -1);
+            // Towards a wall the hand presses it in a little (the physics holds it out and the wall turns it flat against
+            // itself); over an open side it may pull it past the edge, to let it fall off.
+            float keptX = x < surface.from().x() && surface.open().contains(PlaceSurface.Side.RIGHT)
+                    || x > surface.to().x() && surface.open().contains(PlaceSurface.Side.LEFT) ? x
+                    : Mth.clamp(x, surface.from().x() + PRESS, Math.max(surface.from().x() + PRESS, surface.to().x() - PRESS));
+            float keptZ = z < surface.from().y() && surface.open().contains(PlaceSurface.Side.FRONT)
+                    || z > surface.to().y() && surface.open().contains(PlaceSurface.Side.BACK) ? z
+                    : Mth.clamp(z, surface.from().y() + PRESS, Math.max(surface.from().y() + PRESS, surface.to().y() - PRESS));
+            ItemPose steered = new ItemPose(keptX, moved.y(), keptZ, moved.lift(), moved.rotation(), moved.scale(), -1);
+            station.state().setPose(node.placed().slot(), steered);
+            station.scene().physics().steer(index(), steered);
+        }
+
+        @Override
+        public void release() {
+            if (moving) {
+                station.scene().physics().release(index());
+                UiSounds.putDown(node.worldPosition());
+                return;
+            }
+            Target target = itemTarget(station, node.definition());
+            if (target != null) {
+                clickItem(station, target, 0, false, node);
+                // Taken by a click that is over already: no drag of it follows, the next click on a slot puts it there.
+                dragFrom = null;
+            }
+        }
+
+        @Override
+        public void cancel() {
+            if (moving) {
+                station.scene().physics().release(index());
+            }
+        }
+
+        @Override
+        public Presence presence() {
+            return null;
+        }
+    }
+
     /** A button held on a node that takes strokes: the behaviour hears where the cursor is, every frame, until it is let go. */
     private final class Stroke implements Gesture {
         private final ClientStation station;
@@ -1383,6 +1774,12 @@ public final class FocusInput {
             if (send) {
                 lastSent = now;
             }
+            if (station.scene() != null && station.scene().physics() != null) {
+                // Turned by hand, it stays in the hand's grip; let go, it falls as it may and the physics sends where it came to
+                // rest. Nothing is sent meanwhile: the server's answers to it would come back late and turn it back.
+                station.scene().physics().hold(node.placed().slot().index(), true);
+                send = false;
+            }
             placer.dragPlaced(station, node, dx, dy, right, send);
         }
 
@@ -1394,6 +1791,9 @@ public final class FocusInput {
         public void release() {
             if (node != null) {
                 placer.commit(station, node);
+                if (station.scene() != null && station.scene().physics() != null) {
+                    station.scene().physics().release(node.placed().slot().index());
+                }
             }
         }
 

@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [],
   "client": [
+    "client.BlockFaceMixin",
     "client.CameraMixin",
     "client.ChatComponentMixin",
     "client.ClientPacketListenerMixin",
@@ -19,6 +20,7 @@
     "client.ParticleEngineMixin",
     "client.RenderChunkRegionMixin",
     "client.SingleQuadParticleMixin",
+    "client.SodiumOcclusionMixin",
     "client.SodiumWorldSliceMixin"
   ],
   "injectors": {

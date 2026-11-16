@@ -106,6 +106,8 @@ public final class NeoForgeClient {
         bus.addListener(RenderLevelStageEvent.class, event -> {
             if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_ENTITIES) {
                 SceneRenderer.render(event.getPoseStack(), event.getModelViewMatrix(), event.getProjectionMatrix(), event.getCamera());
+            } else if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_PARTICLES) {
+                SceneRenderer.renderCounts();
             }
         });
     }

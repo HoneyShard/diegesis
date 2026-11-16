@@ -88,6 +88,8 @@ public final class SceneRenderer {
     private static final RenderType OVERLAY = RenderType.entityTranslucentCull(TextureAtlas.LOCATION_BLOCKS);
     /** Everything see-through of the scene goes here, in a buffer of its own: it stays one sorted batch. */
     private static final RenderType CLEAR = DiegesisRenderTypes.clearBlockSheet();
+    /** Pixels between an item's right side and its count. */
+    private static final float COUNT_GAP = 0.3F;
     /** Opaque items of the scene, drawn after the opaque parts and before CLEAR, with depth: see {@link #solidItems}. */
     private static final RenderType ITEMS = DiegesisRenderTypes.itemSheet();
     /** The scene's own buffer source this frame (the see-through sheet drawn as CLEAR). */
@@ -99,7 +101,11 @@ public final class SceneRenderer {
      * draws it all later, over the liquid.
      */
     private static MultiBufferSource.BufferSource sceneBuffers;
-    private static final ResourceLocation HIGHLIGHT_SPRITE = ResourceLocation.withDefaultNamespace("block/white_concrete");
+    /**
+     * The flat sprite that highlights are tinted from: this library's own off-white, as white concrete was, so that a resource pack
+     * that retextures concrete does not show through every highlighted slot.
+     */
+    private static final ResourceLocation HIGHLIGHT_SPRITE = ResourceLocation.fromNamespaceAndPath("diegesis", "block/white");
     /** Shadow lean per pixel of height: light from above, a little from the front left, like the GUI's light. */
     private static final float SHADOW_SHEAR_X = -0.22F;
     private static final float SHADOW_SHEAR_Z = 0.3F;
@@ -128,6 +134,12 @@ public final class SceneRenderer {
     private static final Matrix4f TO_WORLD = new Matrix4f();
     /** The block of the station being drawn, which a visual lit as its block takes its light from. */
     private static net.minecraft.core.BlockPos drawnPos;
+    /** The scene's lights while its nodes are drawn, for the models lit as a block; null outside that. */
+    private static List<float[]> drawnLights;
+    private static List<com.pockyl.diegesis.api.scene.PlaceSurface> drawnSurfaces = List.of();
+    /** From the pose stack's space into the drawn station's pixels, points and normals. */
+    private static final Matrix4f TO_STATION = new Matrix4f();
+    private static final org.joml.Matrix3f NORMAL_TO_STATION = new org.joml.Matrix3f();
 
     private SceneRenderer() {
     }
@@ -145,11 +157,14 @@ public final class SceneRenderer {
             renderStations(poseStack, modelView, projection, camera);
         } finally {
             // After every station's frame: the blocks their scenes now stand in for are left out of the next frame's chunks.
+            com.pockyl.diegesis.impl.client.HiddenBlocks.frame();
             ClientStations.get().syncHiddenBlocks();
         }
     }
 
     private static void renderStations(PoseStack poseStack, Matrix4f modelView, Matrix4f projection, Camera camera) {
+        // Counts a frame left undrawn (its later stage never came) must not pile up.
+        PENDING_COUNTS.clear();
         Projector.capture(projection, new Matrix4f(modelView).mul(poseStack.last().pose()), camera.getPosition());
         // The level pose is not turned to the camera here: turning it back to the world only undoes what it holds.
         TO_WORLD.set(poseStack.last().pose()).invert();
@@ -219,7 +234,6 @@ public final class SceneRenderer {
         sceneBuffers.endBatch(ITEMS);
         clearBuffers.endBatch();
         sceneBuffers.endBatch();
-        flushCounts(sceneBuffers);
         if (!PENDING_OUTLINES.isEmpty() || !PENDING_SEEN_OUTLINES.isEmpty()) {
             try {
                 drawOutlines(minecraft);
@@ -228,6 +242,21 @@ public final class SceneRenderer {
                 PENDING_SEEN_OUTLINES.clear();
             }
         }
+        // The counts wait for renderCounts: drawn here, block entities, translucent blocks and particles drawn later by the
+        // game would paint over them, as they do not write depth.
+    }
+
+    /**
+     * Draws the counts that stand on top of everything (turned to the camera, or all with {@code counts_on_top}). Called
+     * after the level's particles: a chest or glass next to the station, drawn after the scene, never covers them, and
+     * neither does the outline round the item under the cursor.
+     */
+    public static void renderCounts() {
+        if (sceneBuffers == null) {
+            PENDING_COUNTS.clear();
+            return;
+        }
+        flushCounts(sceneBuffers);
     }
 
     /**
@@ -322,6 +351,19 @@ public final class SceneRenderer {
         float workPlane = scene.definition().workPlane();
         MultiBufferSource shadows = new ShadowBuffers(buffers);
         List<float[]> lights = lightsOf(scene);
+        drawnLights = lights.isEmpty() ? null : lights;
+        // Surfaces that are moved (a door's shelves) are not where the placing writes them: they hide no light.
+        List<com.pockyl.diegesis.api.scene.PlaceSurface> still = new ArrayList<>();
+        scene.definition().placing().ifPresent(placing -> {
+            for (int i = 0; i < placing.surfaces().size(); i++) {
+                if (scene.surfaceMove(i) == null) {
+                    still.add(placing.surfaces().get(i));
+                }
+            }
+        });
+        drawnSurfaces = still;
+        TO_STATION.set(poseStack.last().pose()).invert();
+        NORMAL_TO_STATION.set(poseStack.last().normal()).invert();
 
         for (NodeInstance node : scene.nodes()) {
             if (!node.isVisible()) {
@@ -330,6 +372,9 @@ public final class SceneRenderer {
             NodeDefinition definition = node.definition();
             int nodeLight = lit(light, node.matrix().getTranslation(new Vector3f()), lights);
             if (node.placed() != null) {
+                if (!scene.isPlacingVisible()) {
+                    continue;
+                }
                 renderPlaced(node, local && ui.hoverOutline() && input.isHandFree(), poseStack, buffers, shadows, nodeLight, level);
                 continue;
             }
@@ -385,14 +430,14 @@ public final class SceneRenderer {
                         level);
                 boolean counted = slot.counts() == SlotBinding.Counts.ALWAYS || slot.counts() == SlotBinding.Counts.HOVER && local && node.isHovered();
                 if (slot.display() != SlotBinding.ItemDisplay.HIDDEN && counted) {
-                    renderCount(poseStack, buffers, stack, slot.size(), slot.countFacing() == SlotBinding.CountFacing.FRONT);
+                    renderCount(poseStack, buffers, stack, slot.size(), slot.countFacing());
                 }
             });
             definition.output().ifPresent(output -> {
                 ItemStack stack = station.state().getOutput(output.output());
                 renderSlotItem(stack, output.display(), output.size(), 0, station.age(), poseStack, buffers,
                         local && node.isHovered() ? LightTexture.FULL_BRIGHT : light, level);
-                renderCount(poseStack, buffers, stack, output.size());
+                renderCount(poseStack, buffers, stack, output.size(), output.countFacing());
             });
             poseStack.popPose();
             if (node.isCarried() && node.visual().isPresent()) {
@@ -408,7 +453,7 @@ public final class SceneRenderer {
             renderInventory(scene, input, poseStack, buffers, light, level);
         }
         if (carried != null && carried.inWorld() && carried.preview() != null) {
-            renderPreview(carried, scene.definition().placing().orElseThrow(), poseStack, buffers, shadows, light, level);
+            renderPreview(carried, scene, scene.definition().placing().orElseThrow(), poseStack, buffers, shadows, light, level);
         } else if (carried != null && carried.inWorld() && !station.isCarriedHidden()) {
             renderCarried(carried.stack(), carried.stationPos(), carried.lean(), carried.size(), poseStack, buffers, shadows, workPlane,
                     light, level);
@@ -430,6 +475,7 @@ public final class SceneRenderer {
                         level);
             }
         }
+        drawnLights = null;
         renderLightPools(scene, poseStack, buffers, workPlane);
         if (local) {
             renderPourHints(scene, input, poseStack, buffers);
@@ -483,6 +529,18 @@ public final class SceneRenderer {
         }
         shape.draw(stack, poseStack, buffers, light, level, seed);
         poseStack.popPose();
+        SlotBinding.Counts counts = item.options().counts();
+        if (pose != null && stack.getCount() > 1
+                && (counts == SlotBinding.Counts.ALWAYS || counts == SlotBinding.Counts.HOVER && node.isHovered())) {
+            // At the foot of the stack, facing the front, wherever it stands and however it is turned.
+            Vector3f at = node.matrix().getTranslation(new Vector3f());
+            poseStack.pushPose();
+            poseStack.translate(at.x(), at.y() - pose.lift(), at.z());
+            // Just past the item's right side, where neither its model nor the outline round it covers the number.
+            float edge = shape.extents(pose.rotation(), item.options().itemSize() * pose.scale()).x + COUNT_GAP;
+            renderCount(poseStack, buffers, String.valueOf(stack.getCount()), Math.max(1.5F, pose.scale() * item.options().itemSize()), true, edge);
+            poseStack.popPose();
+        }
         if (item.options().shadows() && shape.castsShadow() && pose != null && pose.on() < 0) {
             projectShadow(poseStack, pose.y(), 0.0F, () -> {
                 multiply(poseStack, node.matrix());
@@ -492,12 +550,19 @@ public final class SceneRenderer {
     }
 
     /** The stack in the hand, see-through, where it would stand; the place comes from the cursor, the look from the turn it has. */
-    private static void renderPreview(FocusInput.Carried carried, PlacingOptions options, PoseStack poseStack, MultiBufferSource buffers,
-            MultiBufferSource shadows, int light, ClientLevel level) {
+    private static void renderPreview(FocusInput.Carried carried, SceneInstance scene, PlacingOptions options, PoseStack poseStack,
+            MultiBufferSource buffers, MultiBufferSource shadows, int light, ClientLevel level) {
         ItemPose pose = carried.preview();
         ItemStack stack = carried.stack();
-        PlacedShape shape = PlacedShape.of(stack, level, options.blockModels());
+        PlacedShape shape = PlacedShape.of(stack, level, options.blockModels(), options.framePose());
         Vector3fc at = carried.stationPos();
+        Matrix4f move = scene.surfaceMoveOf(options, pose);
+        if (move != null) {
+            // On a moved surface (a door's shelf) the preview is drawn as the surface sees it, with the surface's move.
+            poseStack.pushPose();
+            multiply(poseStack, move);
+            at = new Matrix4f(move).invert().transformPosition(new Vector3f(at));
+        }
         Matrix4f matrix = new Matrix4f().translation(at.x(), at.y(), at.z()).rotate(new org.joml.Quaternionf(pose.rotation()))
                 .scale(shape.modelScale(pose.scale() * options.itemSize()));
         MultiBufferSource ghost = type -> {
@@ -518,6 +583,9 @@ public final class SceneRenderer {
                 multiply(poseStack, matrix);
                 shape.draw(stack, poseStack, shadows, light, level, 0);
             });
+        }
+        if (move != null) {
+            poseStack.popPose();
         }
     }
 
@@ -569,6 +637,10 @@ public final class SceneRenderer {
         if (visual.litAsBlock() && !translucent && drawnPos != null && level != null) {
             // The way the chunks draw the block itself, from a chunk render type, so that the copy looks the same.
             VertexConsumer lit = buffers.getBuffer(RenderType.cutout());
+            if (drawnLights != null) {
+                // The scene's own lights (a lantern on a shelf) brighten the walls and boards around them.
+                lit = new SceneLitConsumer(lit, TO_STATION, NORMAL_TO_STATION, drawnLights, drawnSurfaces);
+            }
             BlockLit.draw(model, state != null ? state : level.getBlockState(drawnPos), drawnPos, poseStack,
                     tint != Visual.WHITE ? new TintedConsumer(lit, tint) : lit, TO_WORLD);
             poseStack.popPose();
@@ -753,12 +825,36 @@ public final class SceneRenderer {
         renderCount(poseStack, buffers, String.valueOf(stack.getCount()), slotSize, standing);
     }
 
+    /** A count facing as a slot or output asks: lying, standing at the front, or turned to the camera. */
+    private static void renderCount(PoseStack poseStack, MultiBufferSource buffers, ItemStack stack, float slotSize,
+            SlotBinding.CountFacing facing) {
+        if (stack.isEmpty() || stack.getCount() <= 1) {
+            return;
+        }
+        renderCount(poseStack, buffers, String.valueOf(stack.getCount()), slotSize, facing != SlotBinding.CountFacing.UP, -1.0F,
+                facing == SlotBinding.CountFacing.CAMERA);
+    }
+
     private static void renderCount(PoseStack poseStack, MultiBufferSource buffers, String text, float slotSize) {
         renderCount(poseStack, buffers, text, slotSize, false);
     }
 
     /** A count at the slot's near right corner: lying on the slot, or {@code standing} at the item's foot, facing the front. */
     private static void renderCount(PoseStack poseStack, MultiBufferSource buffers, String text, float slotSize, boolean standing) {
+        renderCount(poseStack, buffers, text, slotSize, standing, -1.0F);
+    }
+
+    /**
+     * @param outside with {@code standing}, pixels to the player's right of the middle where the number begins: it stands beside the
+     *                item, not over it; negative ends it at the slot's right side
+     */
+    private static void renderCount(PoseStack poseStack, MultiBufferSource buffers, String text, float slotSize, boolean standing, float outside) {
+        renderCount(poseStack, buffers, text, slotSize, standing, outside, false);
+    }
+
+    /** @param camera standing at the item's foot as {@code standing} puts it, but turned to the camera */
+    private static void renderCount(PoseStack poseStack, MultiBufferSource buffers, String text, float slotSize, boolean standing, float outside,
+            boolean camera) {
         if (!ui.showCounts()) {
             return;
         }
@@ -768,7 +864,8 @@ public final class SceneRenderer {
         Matrix4f flat;
         if (standing) {
             // The font's x runs to -x (the player's right), its y (down the page) down, its z towards the front.
-            poseStack.translate(-slotSize / 2.0F, 0.12F, -0.35F);
+            float end = outside < 0.0F ? slotSize / 2.0F : outside + font.width(text) * scale;
+            poseStack.translate(-end, 0.12F, -0.35F);
             flat = new Matrix4f(-scale, 0.0F, 0.0F, 0.0F, 0.0F, -scale, 0.0F, 0.0F, 0.0F, 0.0F, -scale, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F);
         } else {
             // The player's right is -x and the near side -z: the font's x runs to -x, its y (down the page) to -z.
@@ -776,14 +873,30 @@ public final class SceneRenderer {
             flat = new Matrix4f(-scale, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, -scale, 0.0F, 0.0F, scale, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F);
         }
         Matrix4f matrix = new Matrix4f(poseStack.last().pose()).mul(flat);
+        if (camera) {
+            // The level's pose is in the world's axes, around the camera: keep where the number stands, drop every turn of the
+            // scene and turn it as the camera looks (as a name tag), so the font's x runs to the camera's right and its y down.
+            Matrix4f pose = poseStack.last().pose();
+            Vector3f at = pose.getTranslation(new Vector3f());
+            // The scene's own unit (a pixel of the block) in the camera's: the number keeps the size it has lying or standing.
+            float unit = new Vector3f(pose.m00(), pose.m01(), pose.m02()).length();
+            // Brought towards the camera by more than half the item, so that the item, turning or floating, never covers it.
+            float distance = at.length();
+            if (distance > 1.0E-4F) {
+                at.mul(Math.max(0.0F, distance - slotSize * 0.75F * unit) / distance);
+            }
+            matrix = new Matrix4f().translation(at).rotate(Minecraft.getInstance().gameRenderer.getMainCamera().rotation())
+                    .scale(scale * unit, -scale * unit, scale * unit);
+        }
         float x = -font.width(text) + 0.5F;
         float y = -font.lineHeight + 1.5F;
         Matrix4f shadow = new Matrix4f(matrix).translate(1.0F, 1.0F, 0.0F);
         // Lifted a hair above its shadow (the font's z points up here).
         Matrix4f front = new Matrix4f(matrix).translate(0.0F, 0.0F, 0.4F);
         poseStack.popPose();
-        if (ui.countsOnTop()) {
-            // Drawn after everything else, without the depth test: an item's model can never cover its number.
+        if (ui.countsOnTop() || camera) {
+            // Drawn after everything else, without the depth test: an item's model can never cover its number. A number turned
+            // to the camera always is: it stands beside a floating, turning result, which cut into it whatever its distance.
             PENDING_COUNTS.add(new Count(text, x, y, shadow, front));
             return;
         }
@@ -981,11 +1094,23 @@ public final class SceneRenderer {
                 renderPool(node, light, at, workPlane, null, poseStack, buffers);
                 continue;
             }
-            // The light stays in the room it is in: on the surface under it, not through the board to the one below.
-            for (PlaceSurface surface : placing.surfaces()) {
-                if (at.y >= surface.height() && at.y <= surface.height() + surface.clearance()) {
-                    renderPool(node, light, at, surface.height(), surface, poseStack, buffers);
-                    surface.wall().ifPresent(wall -> renderWallPool(node, light, at, wall, surface, poseStack, buffers));
+            // The light stays in the room it is in: on the surface under it, not through the board to the one below. A surface the
+            // scene moves (a door's shelf) gets its pool where it is now.
+            for (int i = 0; i < placing.surfaces().size(); i++) {
+                PlaceSurface surface = placing.surfaces().get(i);
+                Matrix4f move = scene.surfaceMove(i);
+                Vector3f local = move == null ? at : new Matrix4f(move).invert().transformPosition(new Vector3f(at));
+                if (local.y < surface.height() || local.y > surface.height() + surface.clearance()) {
+                    continue;
+                }
+                if (move != null) {
+                    poseStack.pushPose();
+                    multiply(poseStack, move);
+                }
+                renderPool(node, light, local, surface.height(), surface, poseStack, buffers);
+                surface.wall().ifPresent(wall -> renderWallPool(node, light, local, wall, surface, poseStack, buffers));
+                if (move != null) {
+                    poseStack.popPose();
                 }
             }
         }
@@ -1077,7 +1202,8 @@ public final class SceneRenderer {
         }
         double t = Util.getMillis() / 1000.0;
         double phase = (node.id().hashCode() & 0xFFFF) / 65536.0 * Math.PI * 2.0;
-        double wave = 0.5 * Math.sin(t * 7.3 + phase) + 0.3 * Math.sin(t * 13.7 + phase * 2.0) + 0.2 * Math.sin(t * 29.1 + phase * 3.0);
+        // A flame breathes: slow waves under one and a half beats a second, never a jump.
+        double wave = 0.55 * Math.sin(t * 3.1 + phase) + 0.3 * Math.sin(t * 5.7 + phase * 2.0) + 0.15 * Math.sin(t * 9.3 + phase * 3.0);
         return 1.0F - light.flicker() * (float) (0.5 + 0.5 * wave);
     }
 
@@ -1119,13 +1245,18 @@ public final class SceneRenderer {
         if (lights.isEmpty()) {
             return light;
         }
-        float block = LightTexture.block(light);
+        // In light map coordinates (16 a level), not whole levels: a flickering flame brightens and dims smoothly, without steps.
+        float block = light & 0xFFFF;
         for (float[] source : lights) {
+            if (SceneLitConsumer.hidden(source, at, drawnSurfaces)) {
+                // A shelf between them: the light stays on its own shelf.
+                continue;
+            }
             // Soft falloff (bright near the source, a long gentle tail) instead of a straight ramp.
             float near = Math.max(0.0F, 1.0F - at.distance(source[0], source[1], source[2]) / source[4]);
-            block = Math.max(block, source[3] * near * (2.0F - near));
+            block = Math.max(block, source[3] * near * (2.0F - near) * 16.0F);
         }
-        return LightTexture.pack(Math.min(15, Math.round(block)), LightTexture.sky(light));
+        return Math.min(240, Math.round(block)) | light & 0xFFFF0000;
     }
 
     /** The light at the station: the brighter of the block itself and the space above it (a table top is lit from above). */

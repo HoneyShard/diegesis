@@ -416,7 +416,16 @@ public final class FocusController {
 
     /** What the camera looks at, in the station's pixels. */
     public org.joml.Vector3fc baseTarget() {
-        return new Vector3f(baseTarget).add(move);
+        return mirrored(new Vector3f(baseTarget)).add(move);
+    }
+
+    /** {@code point} mirrored as the station mirrors its camera ({@code StationView.mirrorCamera}). */
+    private Vector3f mirrored(Vector3f point) {
+        float plane = station == null ? Float.NaN : station.cameraMirror();
+        if (!Float.isNaN(plane)) {
+            point.x = 2.0F * plane - point.x;
+        }
+        return point;
     }
 
     /**
@@ -530,8 +539,8 @@ public final class FocusController {
             position.lerp(look.shot().position(), look.amount());
             target.lerp(look.shot().target(), look.amount());
         }
-        position.add(move);
-        target.add(move);
+        mirrored(position).add(move);
+        mirrored(target).add(move);
         Vec3 rigPos = station.toWorld(position.x(), position.y(), position.z());
         Vec3 rigTarget = station.toWorld(target.x(), target.y(), target.z());
         Vec3 dir = rigTarget.subtract(rigPos);

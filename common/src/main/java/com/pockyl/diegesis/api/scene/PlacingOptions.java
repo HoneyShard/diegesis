@@ -1,6 +1,8 @@
 package com.pockyl.diegesis.api.scene;
 
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.mojang.serialization.DataResult;
 import org.joml.Vector2f;
 
@@ -30,10 +32,35 @@ import java.util.Optional;
  * @param shadows      items cast their shape on what they stand on
  * @param snap         positions are rounded to this many pixels; 0 keeps them as they are
  * @param previewColor ARGB colour of the see-through copy that shows where the item in the hand would stand
+ * @param counts       when the count of a stack of more than one is written at its foot, facing the front: {@code always},
+ *                     {@code hover} (while the cursor is on it) or {@code never}
+ * @param physics      items fall, tip over and push each other ({@code "physics"}); empty: they stand exactly as put
+ * @param framePose    every item stands as an item frame shows it; false: an item with a 3D model (a can, a jar) stands as it is
+ *                     modelled, upright, where a frame would lay it on its back to face out of the wall; flat icons stand as in a
+ *                     frame either way
+ * @param hoverLift    pixels an item rises while the cursor is on it; 0 (default) keeps it still, the outline alone says so
  */
 public record PlacingOptions(String group, List<PlaceSurface> surfaces, float itemSize, float turnStep, float[] scaleRange, float scaleStep,
         float turnSpeed, boolean stacking, boolean blockModels, boolean itemLight, float lightRadius, int lightColor, boolean shadows,
-        float snap, int previewColor) {
+        float snap, int previewColor, SlotBinding.Counts counts, Optional<PlacingPhysics> physics, boolean framePose, float hoverLift) {
+    /** The light of the items, read as one part: a record codec takes at most 16 fields. */
+    private record Light(boolean itemLight, float lightRadius, int lightColor) {
+        static final MapCodec<Light> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+                StrictCodecs.optional(Codec.BOOL, "item_light", true).forGetter(Light::itemLight),
+                StrictCodecs.optional(Codec.floatRange(1.0F, 256.0F), "light_radius", 11.0F).forGetter(Light::lightRadius),
+                StrictCodecs.optional(Visual.COLOR, "light_color", 0xC0FFC888).forGetter(Light::lightColor)
+        ).apply(instance, Light::new));
+    }
+
+    /** How the items look while worked with, read as one part (a record codec takes at most 16 fields). */
+    private record Look(boolean shadows, int previewColor, float hoverLift) {
+        static final MapCodec<Look> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+                StrictCodecs.optional(Codec.BOOL, "shadows", true).forGetter(Look::shadows),
+                StrictCodecs.optional(Visual.COLOR, "preview_color", 0xA0FFFFFF).forGetter(Look::previewColor),
+                StrictCodecs.optional(Codec.floatRange(0.0F, 4.0F), "hover_lift", 0.0F).forGetter(Look::hoverLift)
+        ).apply(instance, Look::new));
+    }
+
     public static final Codec<PlacingOptions> CODEC = StrictCodecs.<PlacingOptions>record(instance -> instance.group(
             NodeDefinition.ID_CODEC.fieldOf("group").forGetter(PlacingOptions::group),
             PlaceSurface.CODEC.listOf().fieldOf("surfaces").forGetter(PlacingOptions::surfaces),
@@ -44,16 +71,28 @@ public record PlacingOptions(String group, List<PlaceSurface> surfaces, float it
             StrictCodecs.optional(Codec.floatRange(0.05F, 8.0F), "turn_speed", 1.2F).forGetter(PlacingOptions::turnSpeed),
             StrictCodecs.optional(Codec.BOOL, "stacking", true).forGetter(PlacingOptions::stacking),
             StrictCodecs.optional(Codec.BOOL, "block_models", true).forGetter(PlacingOptions::blockModels),
-            StrictCodecs.optional(Codec.BOOL, "item_light", true).forGetter(PlacingOptions::itemLight),
-            StrictCodecs.optional(Codec.floatRange(1.0F, 256.0F), "light_radius", 11.0F).forGetter(PlacingOptions::lightRadius),
-            StrictCodecs.optional(Visual.COLOR, "light_color", 0xC0FFC888).forGetter(PlacingOptions::lightColor),
-            StrictCodecs.optional(Codec.BOOL, "shadows", true).forGetter(PlacingOptions::shadows),
+            Light.MAP_CODEC.forGetter(placing -> new Light(placing.itemLight, placing.lightRadius, placing.lightColor)),
+            Look.MAP_CODEC.forGetter(placing -> new Look(placing.shadows, placing.previewColor, placing.hoverLift)),
             StrictCodecs.optional(Codec.floatRange(0.0F, 16.0F), "snap", 0.25F).forGetter(PlacingOptions::snap),
-            StrictCodecs.optional(Visual.COLOR, "preview_color", 0xA0FFFFFF).forGetter(PlacingOptions::previewColor)
-    ).apply(instance, PlacingOptions::new)).comapFlatMap(PlacingOptions::validate, placing -> placing);
+            StrictCodecs.optional(SlotBinding.Counts.CODEC, "counts", SlotBinding.Counts.NEVER).forGetter(PlacingOptions::counts),
+            StrictCodecs.optional(PlacingPhysics.CODEC, "physics").forGetter(PlacingOptions::physics),
+            StrictCodecs.optional(Codec.BOOL, "frame_pose", false).forGetter(PlacingOptions::framePose)
+    ).apply(instance, (group, surfaces, itemSize, turnStep, scaleRange, scaleStep, turnSpeed, stacking, blockModels, light, look, snap,
+            counts, physics, framePose) -> new PlacingOptions(group, surfaces, itemSize, turnStep, scaleRange, scaleStep, turnSpeed,
+            stacking, blockModels, light.itemLight(), light.lightRadius(), light.lightColor(), look.shadows(), snap, look.previewColor(), counts,
+            physics, framePose, look.hoverLift())))
+            .comapFlatMap(PlacingOptions::validate, placing -> placing);
 
     public PlacingOptions {
         surfaces = List.copyOf(surfaces);
+    }
+
+    /** The options without physics, as before {@code physics} existed. */
+    public PlacingOptions(String group, List<PlaceSurface> surfaces, float itemSize, float turnStep, float[] scaleRange, float scaleStep,
+            float turnSpeed, boolean stacking, boolean blockModels, boolean itemLight, float lightRadius, int lightColor, boolean shadows,
+            float snap, int previewColor, SlotBinding.Counts counts) {
+        this(group, surfaces, itemSize, turnStep, scaleRange, scaleStep, turnSpeed, stacking, blockModels, itemLight, lightRadius, lightColor,
+                shadows, snap, previewColor, counts, Optional.empty(), false, 0.0F);
     }
 
     private static DataResult<PlacingOptions> validate(PlacingOptions placing) {
@@ -88,6 +127,10 @@ public record PlacingOptions(String group, List<PlaceSurface> surfaces, float it
         private boolean shadows = true;
         private float snap = 0.25F;
         private int previewColor = 0xA0FFFFFF;
+        private SlotBinding.Counts counts = SlotBinding.Counts.NEVER;
+        private PlacingPhysics physics;
+        private boolean framePose;
+        private float hoverLift;
 
         private Builder(String group) {
             this.group = group;
@@ -169,9 +212,32 @@ public record PlacingOptions(String group, List<PlaceSurface> surfaces, float it
             return this;
         }
 
+        public Builder counts(SlotBinding.Counts value) {
+            counts = value;
+            return this;
+        }
+
+        /** Items fall, tip over and push each other. */
+        public Builder physics(PlacingPhysics value) {
+            physics = value;
+            return this;
+        }
+
+        /** Every item stands as an item frame shows it, 3D models too. */
+        public Builder framePose(boolean value) {
+            framePose = value;
+            return this;
+        }
+
+        /** Pixels an item rises while the cursor is on it. */
+        public Builder hoverLift(float pixels) {
+            hoverLift = pixels;
+            return this;
+        }
+
         public PlacingOptions build() {
             PlacingOptions placing = new PlacingOptions(group, surfaces, itemSize, turnStep, scaleRange, scaleStep, turnSpeed, stacking,
-                    blockModels, itemLight, lightRadius, lightColor, shadows, snap, previewColor);
+                    blockModels, itemLight, lightRadius, lightColor, shadows, snap, previewColor, counts, Optional.ofNullable(physics), framePose, hoverLift);
             return validate(placing).getOrThrow();
         }
     }

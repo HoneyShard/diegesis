@@ -46,10 +46,12 @@ public final class Projector {
         float ndcX = (float) (2.0 * guiX / minecraft.getWindow().getGuiScaledWidth() - 1.0);
         float ndcY = (float) (1.0 - 2.0 * guiY / minecraft.getWindow().getGuiScaledHeight());
         Vector4f near = INVERSE.transform(new Vector4f(ndcX, ndcY, -1.0F, 1.0F));
-        Vector4f far = INVERSE.transform(new Vector4f(ndcX, ndcY, 1.0F, 1.0F));
+        // The second point half way into the depth range, a few centimetres past the near plane: some mods put the far plane a
+        // million blocks away at a large render distance, where its w is lost in float rounding and the ray came out NaN.
+        Vector4f deeper = INVERSE.transform(new Vector4f(ndcX, ndcY, 0.0F, 1.0F));
         Vector3f nearPoint = new Vector3f(near.x / near.w, near.y / near.w, near.z / near.w);
-        Vector3f farPoint = new Vector3f(far.x / far.w, far.y / far.w, far.z / far.w);
-        Vector3f direction = farPoint.sub(nearPoint).normalize();
+        Vector3f deeperPoint = new Vector3f(deeper.x / deeper.w, deeper.y / deeper.w, deeper.z / deeper.w);
+        Vector3f direction = deeperPoint.sub(nearPoint).normalize();
         return new Ray(camera.add(nearPoint.x, nearPoint.y, nearPoint.z), direction);
     }
 

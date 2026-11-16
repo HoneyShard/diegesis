@@ -35,7 +35,7 @@ public static final StationType STILL = Diegesis.station(ResourceLocation.fromNa
 | `scene(ResourceLocation)` | the station id | Another scene than `assets/<ns>/diegesis/scenes/<path>.json` of the id. |
 | `logic(StationLogic.Factory)` | none | The rules; one logic object per station in use. |
 | `openWhen(OpenCondition)` | vanilla-like | `(player, pos, state)`: whether a use opens the station; false leaves the block its normal use. The default lets sneaking with an item in hand use the item. |
-| `orientation(Orientation)` | `AUTO` | How the scene is turned: `AUTO` (the block's facing if it has one, else towards the player), `BLOCK`, `PLAYER`, `FIXED` (as authored). |
+| `orientation(Orientation)` | `AUTO` | How the scene is turned: `AUTO` (the block's facing if it has one, else towards the player), `BLOCK`, `PLAYER`, `FIXED` (as authored), `BLOCK_OPPOSITE` (the block's facing turned round, for blocks whose facing names their back). |
 | `reach(double)` | `6` | How far (blocks) from the eyes to the block centre a player may work. |
 | `exclusive()` | shared | One player at a time; others get the block's normal use while it is busy. |
 | `hidesBlock()` | off | The block's own model is not drawn while the station is in use: the scene shows it instead, so its parts can open and move. Any block, also another mod's. |
@@ -59,7 +59,10 @@ At least one block, supplier or tag is required.
   off-hand key, Q, the pick button in creative mode and a click past the block, which throws the stack). Items move, and it
   works on any server, with or without Diegesis: nothing is sent but vanilla packets. Register such a station from the
   client entry point; no `StationLogic` runs. Any other menu the server opens for the use (a plugin's screen, a mod's own
-  menu) opens its vanilla screen and the station leaves; a use the server does not answer in time ends it quietly.
+  menu) opens its vanilla screen and the station leaves; a use the server does not answer in time ends it quietly. A mod
+  that replaces the block's menu by one of its own with the same slots is taken too when the binding names it:
+  `alsoAccepts(new ResourceLocation("visualworkbench", "crafting"))` (by name, as that mod registers it later and may be
+  missing).
 
   ```java
   Diegesis.station(id("crafting_table"))
@@ -73,7 +76,10 @@ At least one block, supplier or tag is required.
   automatic shift-click that waits until the menu has been open a moment, `pressButton`), `StationBehavior.onMenuOpened`
   and `onMenuRefused` (`TIMEOUT`, `OTHER_MENU`, `CLOSED_BY_SERVER`). Menu stations do not go over to neighbours yet.
 
-  At a menu station the wheel moves one item at a time (down: to the other side, up: one more of the same here). A screen
+  At a menu station the wheel over a stack moves one item at a time (down: to the other side, up: one more of the same here).
+  With a stack in the hand, at any station, the wheel over a slot puts one of it in (down) or takes one of the same back into
+  the hand (up), and a drag with the middle button shares the stack evenly over the slots crossed (in creative mode at a menu
+  station, a full stack into each, as vanilla does). A screen
   registered with `DiegesisClient.registerChildScreen` (a recipe viewer's page) opens over any station without ending it;
   `DiegesisClient.hoveredStack()` tells a viewer's key handler what is under the cursor.
 

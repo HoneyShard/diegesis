@@ -102,7 +102,36 @@ public final class ActionHandler {
             case QUICK_MOVE -> quickMove(station, logic, player, slot);
             case PICKUP_ALL -> pickupAll(station, logic, player);
             case PUT_AWAY -> putAway(player);
+            case SPILL -> spill(station, player, slot);
         };
+    }
+
+    /**
+     * A placed item fell out of the station: it goes into the inventory as a shift-click takes it, and what has no room there
+     * falls on the ground in front of the station, out of its open side.
+     */
+    private static boolean spill(StationContext station, Player player, Slot slot) {
+        ItemStack stack = slot.get().copy();
+        if (stack.isEmpty() || !slot.inStation() || !slot.mayPickup()) {
+            return false;
+        }
+        ItemStack fell = stack.copy();
+        player.getInventory().add(stack);
+        if (!stack.isEmpty() && !station.level().isClientSide()) {
+            // The client's guess only takes it out; the server drops it, and the world shows it to everyone.
+            net.minecraft.core.Direction front = station.facing();
+            double x = station.pos().getX() + 0.5 + front.getStepX() * 0.7;
+            double y = station.pos().getY() + 0.3;
+            double z = station.pos().getZ() + 0.5 + front.getStepZ() * 0.7;
+            net.minecraft.world.entity.item.ItemEntity dropped = new net.minecraft.world.entity.item.ItemEntity(station.level(), x, y, z,
+                    stack.copy(), front.getStepX() * 0.08, 0.1, front.getStepZ() * 0.08);
+            dropped.setDefaultPickUpDelay();
+            station.level().addFreshEntity(dropped);
+            stack.setCount(0);
+        }
+        slot.set(ItemStack.EMPTY);
+        slot.taken(fell);
+        return true;
     }
 
     /** Vanilla's left/right click on a slot with whatever is on the cursor. */

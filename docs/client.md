@@ -24,6 +24,8 @@ default.
 | `onStateChanged(view, changes)` | Slots, controls, tanks or outputs changed, by any player or by the logic. `changes.slots()`, `controls()`, `outputs()`, `tanks()` name what. |
 | `onEvent(view, event)` | The local player did something (below). |
 | `onItemClick(view, node, stack, button, shift)` | The local player clicked a node with `stack` on the cursor (or let it go there), before it goes anywhere: return true when you handled it, usually with `sendAction`, and no slot sees the click. A bowl dipped into a soup, a tool touched to a part; `shift` for the whole stack at once. |
+| `onKey(view, keyCode, scanCode, modifiers)` | A key went down while the player works at the station, before the library's own keys (leaving, going over, slot and drop keys); repeats of a held key too. Return true to take it. Take only what the station needs at that moment, such as typing into a field it shows. |
+| `onChar(view, character, modifiers)` | A character typed while the player works at the station. Return true to take it. |
 | `onScroll(view, node, amount)` | The mouse wheel over the scene, `node` under the cursor (null over nothing), before the library turns a control or a placed object: return true when you handled it. Going up or down a tower, leafing through something; `amount` positive away from the player. |
 | `onInventoryShiftClick(view, slot, stack)` | Shift + click on a stack of the inventory: return true when the station takes it itself (a stack laid on a board), false for the usual move into its slots. |
 | `onEffect(view, effect, node, data)` | The logic played an effect (`StationContext.effect`), after the effect itself. |
@@ -56,11 +58,16 @@ click it refuses or `showOverlay(null)`),
 `playSound(sound, node, volume, pitch)`,
 `setInventoryOpen(boolean)` and `isInventoryOpen()` (the `inventory_drawer` or a toggled laid-out inventory),
 `setInventoryFilter(predicate)` (which stacks a `compact` drawer shows: the ones the station can use),
+`setSurfaceTransform(surface, matrix)` (what stands on a surface of the `placing` moves with a part: a drawer sliding out, the
+shelves of a door; write the surface where the part stands open) and `setPlacingVisible(boolean)` (the placed items are drawn or not:
+off while they are shut away; set it every frame it should hold),
 `setCarriedHidden(boolean)` (the library leaves out the stack on the cursor while it is over the scene, so the station draws it
 as the tool it is: a knife that comes down when clicked; set it every frame it should hold),
 `glance(id)`, `glanceBack()` and `currentGlance()` (the camera's `glances`: show the player something at a moment of your
 choosing; a glance without an `edge` exists for this), `moveCamera(x, y, z)` and `cameraMove()` (the whole camera, its
-shot, seat, inventory shot and glances, moved by that many scene pixels and gliding there: work at another height of a tower).
+shot, seat, inventory shot and glances, moved by that many scene pixels and gliding there: work at another height of a tower),
+`mirrorCamera(x)` and `cameraMirror()` (the whole camera mirrored across the upright plane at scene x: a block that comes in two
+hands, such as a cupboard whose door hangs on either side, is seen from the side the door leaves free; `NaN` turns it off).
 
 ### NodeView
 
