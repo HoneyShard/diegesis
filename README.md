@@ -16,6 +16,7 @@
   <a href="https://neoforged.net"><img alt="NeoForge" src="https://img.shields.io/badge/Loader-NeoForge-D7742F"></a>
   <a href="https://fabricmc.net"><img alt="Fabric" src="https://img.shields.io/badge/Loader-Fabric-C6BBA5"></a>
   <a href="docs/README.md"><img alt="Documentation" src="https://img.shields.io/badge/Docs-guide%20%26%20cookbook-4A6CB0"></a>
+  <a href="https://discord.gg/mGkPKccJEf"><img alt="Discord: Pocky's Kitchen" src="https://img.shields.io/badge/Discord-Pocky's%20Kitchen-5865F2?logo=discord&logoColor=white"></a>
   <a href="LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/License-MIT-blue"></a>
 </p>
 
@@ -48,6 +49,8 @@ Made something with Diegesis? Open an issue and it will be listed here.
   slots. The inventory stays at the bottom of the screen, slides in as a drawer or is laid out in the scene.
 - ✋ **Carried objects** - the player picks objects up and moves them over the block. They lag slightly behind the
   cursor, lean and cast a shadow.
+- 🫙 **Free placing** - items are put down anywhere on a station's shelves, turned and sized by hand. With physics on
+  they fall, tip over and push each other, and lanterns among them light the shelves.
 - 🎛️ **Controls** - toggles, buttons, knobs and sliders. A lever, a switch, a button, a knob and a slider come ready to
   use with one line in a scene.
 - 💧 **Liquids and pouring** - tanks hold real amounts of liquid that sway and ripple. Point a vessel at a tank to pour
@@ -133,6 +136,9 @@ react to the state and to what the player does.
 | [Client](docs/client.md) | Behaviours, node animation, scene events, effects, particles, liquids, sounds. |
 | [Cookbook](docs/cookbook.md) | A board game, crafting on a block, a lever and a lamp, a gauge, pouring, a burner. |
 | [JSON Schema](docs/schema/scene.schema.json) | Add `"$schema": "https://raw.githubusercontent.com/Pocky-l/diegesis/main/docs/schema/scene.schema.json"` to a scene for completion and checks in the editor. |
+
+Questions about the API or a station you are building can go to [Pocky's Kitchen](https://discord.gg/mGkPKccJEf), our
+Discord server.
 
 ## Compatibility
 
