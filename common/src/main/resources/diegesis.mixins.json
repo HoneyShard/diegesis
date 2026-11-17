@@ -20,9 +20,9 @@
     "client.ParticleEngineMixin",
     "client.RenderChunkRegionMixin",
     "client.SingleQuadParticleMixin",
-    "client.TextureSheetParticleGpuMixin",
     "client.SodiumOcclusionMixin",
-    "client.SodiumWorldSliceMixin"
+    "client.SodiumWorldSliceMixin",
+    "client.TextureSheetParticleGpuMixin"
   ],
   "injectors": {
     "defaultRequire": 1

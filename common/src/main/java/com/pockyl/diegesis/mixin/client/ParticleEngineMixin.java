@@ -12,10 +12,10 @@ import com.pockyl.diegesis.impl.client.render.ClearView;
  * Puts back the last particle faded in the clear view once the particles are drawn, and before they tick: a renderer that draws
  * the particle itself and cancels the vanilla method skips anything after it.
  * <p>
- * AsyncParticles replaces render and tick with an {@code @Overwrite} (default priority 1000). Mixin only lets an injector
- * reach a method another mixin merged when that mixin has a lower priority, so this one runs above it and lands in
- * AsyncParticles' versions; {@code require = 0} so a future change there can't stop the game from starting (the faded
- * particle is still put back by the next {@link ClearView#particleFade} call).
+ * AsyncParticles replaces render and tick with an {@code @Overwrite}. Mixin lets an injector reach a method another mixin
+ * merged only from a higher priority, so this one runs above it and lands in AsyncParticles' versions. {@code require = 0}: a
+ * later change there cannot stop the game from starting, and the next {@link ClearView#particleFade} call still puts the faded
+ * particle back.
  */
 @Mixin(value = ParticleEngine.class, priority = 1100)
 abstract class ParticleEngineMixin {

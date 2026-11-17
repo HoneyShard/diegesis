@@ -4,6 +4,17 @@ All notable changes to this mod are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-beta.12+1.21.1] - Unreleased
+### Fixed
+- The game no longer crashes on start with [AsyncParticles](https://modrinth.com/mod/asyncparticles), and particles in
+  front of a station fade with its GPU particles on too.
+- Claim mods such as [Open Parties and Claims](https://modrinth.com/mod/open-parties-and-claims) and
+  spawn protection keep a station closed to players who may not use the block.
+- No sliver of the hand stays in view at a station under an [Iris](https://modrinth.com/mod/iris) shader pack.
+
+Thanks to LeDok for these fixes ([#5](https://github.com/Pocky-l/diegesis/pull/5), [#6](https://github.com/Pocky-l/diegesis/pull/6),
+[#7](https://github.com/Pocky-l/diegesis/pull/7), [#8](https://github.com/Pocky-l/diegesis/pull/8)).
+
 ## [1.0.0-beta.11+1.21.1] - 2026-11-16
 ### Added
 - `placing.physics`: placed items have weight. They fall, tip over, push each other and drop off open edges into the
