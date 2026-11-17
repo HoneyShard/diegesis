@@ -60,7 +60,9 @@ click it refuses or `showOverlay(null)`),
 `setInventoryFilter(predicate)` (which stacks a `compact` drawer shows: the ones the station can use),
 `setSurfaceTransform(surface, matrix)` (what stands on a surface of the `placing` moves with a part: a drawer sliding out, the
 shelves of a door; write the surface where the part stands open) and `setPlacingVisible(boolean)` (the placed items are drawn or not:
-off while they are shut away; set it every frame it should hold),
+off while they are shut away; set it every frame it should hold), `setPlacingReachable(boolean)` (the placed items can be
+picked and the surfaces take items: off while they are seen but out of reach, behind the shut glass door of an oven; set it every
+frame it should hold),
 `setCarriedHidden(boolean)` (the library leaves out the stack on the cursor while it is over the scene, so the station draws it
 as the tool it is: a knife that comes down when clicked; set it every frame it should hold),
 `glance(id)`, `glanceBack()` and `currentGlance()` (the camera's `glances`: show the player something at a moment of your

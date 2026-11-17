@@ -32,7 +32,12 @@ final class Neighbors {
     /** Seconds between two looks around: blocks placed or broken meanwhile are found that soon. */
     private static final float RESCAN = 0.25F;
 
-    record Neighbor(Side edge, BlockPos pos, StationType type, CameraNeighbors rules) {
+    /**
+     * A station next to this one, on the side of the screen it stands on. {@code pointer}: the cursor resting at that edge goes
+     * over to it; false on the edge the inventory drawer uses, which only the keys reach (the cursor there is over the
+     * inventory).
+     */
+    record Neighbor(Side edge, BlockPos pos, StationType type, CameraNeighbors rules, boolean pointer) {
     }
 
     private final Map<Side, Neighbor> found = new EnumMap<>(Side.class);
@@ -80,8 +85,9 @@ final class Neighbors {
         }
         spent.removeIf(edge -> Glance.distance(edge, u, v) > rules.zone());
         Side at = null;
-        for (Side edge : found.keySet()) {
-            if (!spent.contains(edge) && Glance.distance(edge, u, v) <= rules.zone()) {
+        for (Map.Entry<Side, Neighbor> entry : found.entrySet()) {
+            Side edge = entry.getKey();
+            if (entry.getValue().pointer() && !spent.contains(edge) && Glance.distance(edge, u, v) <= rules.zone()) {
                 at = edge;
                 break;
             }
@@ -128,7 +134,8 @@ final class Neighbors {
 
     /**
      * Every station around that the player could open from where they stand and that allows it, nearest first on each edge: the
-     * edge is the side of the screen the station is on, seen from the rig. Edges a glance or the drawer uses are theirs.
+     * edge is the side of the screen the station is on, seen from the rig; one straight above or below is on the top or the
+     * bottom edge. Edges a glance uses are its own; on the drawer's edge only the keys go over.
      */
     private void scan(ClientStation station, CameraNeighbors rules) {
         found.clear();
@@ -144,7 +151,7 @@ final class Neighbors {
         for (CameraGlance glance : rig.glances()) {
             glance.edge().ifPresent(taken::add);
         }
-        scene.inventoryDrawer().ifPresent(drawer -> taken.add(drawer.side()));
+        Side drawerSide = scene.inventoryDrawer().map(drawer -> drawer.side()).orElse(null);
         // In the level's coordinates, as the neighbours' blocks are: on a moving structure they are kept together, far away.
         Vec3 eye = station.toLevel(rig.position().x(), rig.position().y(), rig.position().z());
         Vec3 look = station.toLevel(rig.target().x(), rig.target().y(), rig.target().z()).subtract(eye);
@@ -180,14 +187,20 @@ final class Neighbors {
                     Vec3 away = pos.getCenter().subtract(here);
                     double across = away.dot(right);
                     double along = away.dot(forward);
-                    Side edge = Math.abs(across) >= Math.abs(along) ? across > 0.0 ? Side.RIGHT : Side.LEFT
-                            : along > 0.0 ? Side.TOP : Side.BOTTOM;
+                    Side edge;
+                    if (dx == 0 && dz == 0) {
+                        // Straight above or below (a fridge on its freezer): where the player sees it.
+                        edge = dy > 0 ? Side.TOP : Side.BOTTOM;
+                    } else {
+                        edge = Math.abs(across) >= Math.abs(along) ? across > 0.0 ? Side.RIGHT : Side.LEFT
+                                : along > 0.0 ? Side.TOP : Side.BOTTOM;
+                    }
                     double distance = away.lengthSqr();
                     if (taken.contains(edge) || nearest.containsKey(edge) && nearest.get(edge) <= distance) {
                         continue;
                     }
                     nearest.put(edge, distance);
-                    found.put(edge, new Neighbor(edge, pos, type, rules));
+                    found.put(edge, new Neighbor(edge, pos, type, rules, edge != drawerSide));
                 }
             }
         }

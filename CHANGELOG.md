@@ -5,14 +5,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.0.0-beta.12+1.21.1] - Unreleased
+### Added
+- `StationView.setPlacingReachable`: placed items stay in sight but out of reach, behind the shut glass door of an oven.
 ### Fixed
+- A block beside the station no longer disappears when the camera only looks past its corner: `clear_view` leaves out
+  only blocks that stand in the way.
 - The game no longer crashes on start with [AsyncParticles](https://modrinth.com/mod/asyncparticles), and particles in
   front of a station fade with its GPU particles on too.
 - Claim mods such as [Open Parties and Claims](https://modrinth.com/mod/open-parties-and-claims) and
   spawn protection keep a station closed to players who may not use the block.
 - No sliver of the hand stays in view at a station under an [Iris](https://modrinth.com/mod/iris) shader pack.
+- A station straight above or below (a fridge on its freezer) is reached from the top or bottom edge of the screen, by
+  the cursor or by W and S, no longer from the left edge.
+- A neighbour on the side of the inventory drawer is reached by its key, where the cursor would be over the inventory.
+- Items that come into a `placing` without a place (a shift-click, a hopper) stand in the middle of a row first, where
+  they are seen.
 
-Thanks to LeDok for these fixes ([#5](https://github.com/Pocky-l/diegesis/pull/5), [#6](https://github.com/Pocky-l/diegesis/pull/6),
+Thanks to LeDok for the fixes for AsyncParticles, claim mods and Iris ([#5](https://github.com/Pocky-l/diegesis/pull/5), [#6](https://github.com/Pocky-l/diegesis/pull/6),
 [#7](https://github.com/Pocky-l/diegesis/pull/7), [#8](https://github.com/Pocky-l/diegesis/pull/8)).
 
 ## [1.0.0-beta.11+1.21.1] - 2026-11-16

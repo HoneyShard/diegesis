@@ -141,8 +141,9 @@ final class Placer {
 
     private ItemPose aim(ClientStation station, FocusInput.StationRay ray, ItemStack carried, boolean overWorld, boolean frozen, float dt) {
         PlacingOptions options = options(station);
-        if (options == null || carried.isEmpty() || !overWorld || !station.scene().isPlacingVisible()) {
-            // Shut away (a door closed on them), the surfaces take nothing.
+        if (options == null || carried.isEmpty() || !overWorld || !station.scene().isPlacingVisible()
+                || !station.scene().isPlacingReachable()) {
+            // Shut away (a door closed on them) or out of reach (behind its glass), the surfaces take nothing.
             return null;
         }
         if (carried == putDown && Util.getMillis() < putDownUntil) {

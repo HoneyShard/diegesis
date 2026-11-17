@@ -120,8 +120,9 @@ In code: `SceneDefinition.builder().gains(GainOptions.OFF)`.
 
 Stations standing side by side work as one place: the cursor resting at the edge of the screen on the side another
 station stands flies the camera over to it, and the player works there without leaving. The edge is the side the
-station is on as the rig sees it: left, right, top for one further away, bottom for one behind. Both scenes must allow
-it; it is on by default.
+station is on as the rig sees it: left, right, top for one further away, bottom for one behind. One straight above is on
+the top edge and one straight below on the bottom edge (a fridge on its freezer). Both scenes must allow it; it is on by
+default.
 
 ```json
 "camera": {
@@ -142,7 +143,8 @@ it; it is on by default.
 | `keys` | `true` | The movement and arrow keys go over at once to the neighbour on their side: A, D and left, right; W and up to the top edge, S and down to the bottom one. Where the cursor is does not matter. |
 
 A station counts when the player could open it from where they stand: its open condition holds and it is within its
-reach. An edge used by a glance or by the `inventory_drawer` stays theirs. Nothing moves while a stack is on the cursor,
+reach. An edge used by a glance stays the glance's. On the edge of the `inventory_drawer` the cursor stays over the inventory:
+only the keys go over to a neighbour there, and no arrow is drawn. Nothing moves while a stack is on the cursor,
 an object is in the hand or a glance is away, by the cursor or by a key. A cursor still at the edge on arrival has to leave it first, so the camera
 never flies on by itself. The server ends the use of the station left as it opens the next one; the cursor stack goes
 back to the inventory as on leaving. In code: `rig.withNeighbors(CameraNeighbors.NONE)`.
@@ -474,8 +476,8 @@ While a player works at the station, entities and the world's particles between 
 the edge of a cone round the line of sight, and they come back as the camera leaves. A figure in the way stays as a faint ghost at
 the edge of the shot and never covers the scene; a campfire's smoke under a pot stops at the cone. Blocks in the camera's way are
 left out of the picture: the blocks the camera stands in, from any of the scene's shots, and those between it and the work surface,
-such as a wall cabinet over the station or a low ceiling. Their neighbours show their faces, light stays as it was, and the blocks
-are back once the camera has flown back. The shot never moves, so what the scene hangs before the camera stays where it was
+such as a wall cabinet over the station or a low ceiling; a neighbour that only grazes the edge of the view stays. Their
+neighbours show their faces, light stays as it was, and the blocks are back once the camera has flown back. The shot never moves, so what the scene hangs before the camera stays where it was
 framed. Nobody else sees a change, and the scene's own particles stay. On by default; every field is optional.
 
 | Field | Default | Meaning |
@@ -484,7 +486,7 @@ framed. Nobody else sees a change, and the scene's own particles stay. On by def
 | `particles` | `true` | World particles dissolve. |
 | `radius` | `16` | How wide the clear cone is at the station, pixels. |
 | `soft` | `12` | How far beyond `radius` things come back to full strength, pixels. |
-| `blocks` | `true` | Blocks in the camera's way are not drawn: those within 0.3 blocks of the camera in any shot of the scene (the rig's, seats', the inventory's, glances'), and those a line from the camera to the work surface passes through. The work surface is the block's top at the camera target's height and 4 pixels over it, 2 pixels in from the sides: put the target on the surface the player works on. Blocks count by their visual shape, as for the vanilla third-person camera (glass never does); the station's own block always stays. Works with Embeddium and Sodium. |
+| `blocks` | `true` | Blocks in the camera's way are not drawn: those within 0.3 blocks of the camera in any shot of the scene (the rig's, seats', the inventory's, glances'), and those that stand before the work surface: before the camera's target, or before at least a third of the surface. The work surface is the block's top at the camera target's height and 4 pixels over it, 2 pixels in from the sides: put the target on the surface the player works on. A neighbour whose corner only grazes the view past the station's side stays. Blocks count by their visual shape, as for the vanilla third-person camera (glass never does); the station's own block always stays. Works with Embeddium and Sodium. |
 
 ## hud
 
@@ -675,7 +677,7 @@ Surfaces on parts that move (a drawer, the shelves of a door) are written where 
 or shut for a door that stops part way open and would turn its shelves askew. The cursor, the see-through preview and the
 pool of light find them where they are now; the station's code moves
 what stands on them with the part (`StationView.setSurfaceTransform`) and hides it all while it is shut away
-(`setPlacingVisible`).
+(`setPlacingVisible`), or keeps it in sight but out of reach behind a shut glass door (`setPlacingReachable`).
 
 The light of lights in the scene stays in the room it is in: a pool on the surface under it and on its `wall`, cut off at the
 surface's edges, not through a board to the shelf below. Models drawn `lit_as_block` (the scene's copy of a cupboard) take it

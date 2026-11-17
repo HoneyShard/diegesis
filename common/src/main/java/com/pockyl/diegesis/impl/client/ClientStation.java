@@ -362,6 +362,13 @@ public final class ClientStation implements StationView, StationContext {
     }
 
     @Override
+    public void setPlacingReachable(boolean reachable) {
+        if (scene != null) {
+            scene.setPlacingReachable(reachable);
+        }
+    }
+
+    @Override
     public boolean hasRoomFor(ItemStack stack) {
         return scene != null && scene.hasRoomFor(stack);
     }
