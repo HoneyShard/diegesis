@@ -917,6 +917,10 @@ public final class SceneRenderer {
         }
         // Everything of this frame so far must be on screen first, or items drawn later would paint over the numbers.
         buffers.endBatch();
+        // The see-through text type only leaves the depth test as it finds it ("always" is no change), and the level leaves it
+        // on after the particles: a block item standing before its number (a log in the furnace) hid the digits over it.
+        boolean depthTest = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+        RenderSystem.disableDepthTest();
         Font font = Minecraft.getInstance().font;
         for (Count count : PENDING_COUNTS) {
             font.drawInBatch(count.text(), count.x(), count.y(), 0xFF3F3F3F, false, count.shadow(), buffers,
@@ -928,6 +932,9 @@ public final class SceneRenderer {
         }
         PENDING_COUNTS.clear();
         buffers.endBatch();
+        if (depthTest) {
+            RenderSystem.enableDepthTest();
+        }
     }
 
     /** A count waiting to be drawn on top: its text, position in font units and matrices. */

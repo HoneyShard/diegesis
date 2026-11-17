@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The square under the cursor on an `upright` slot stands in the item's plane, behind it, no longer flat at its foot.
 ### Fixed
 - Enchanted items in a scene show their glint again: it was drawn before the items and hidden by the depth test.
+- Stack counts drawn on top are no longer cut by a block standing in front of them: a log in a furnace showed "4" for 54.
 
 ## [1.0.0-beta.12+1.20.1] - 2026-11-17
 ### Added
