@@ -11,8 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `NodeView.setTooltipItem`: a node that draws an item itself (a result hovering over the work) shows its tooltip and takes
   recipe viewers' keys, as a slot does.
 - `DiegesisClient.items(buffers)`: buffers for an item a node painter draws, with depth and its enchantment glint.
+- Menu stations go over to neighbouring stations like any other: the movement and arrow keys and the cursor at the edge of
+  the screen now reach a furnace beside a crafting table, and a kitchen station beside either.
+- Interface option `carry_count_facing`: which way the count of the stack in the hand faces.
 ### Changed
 - The square under the cursor on an `upright` slot stands in the item's plane, behind it, no longer flat at its foot.
+- The count of the stack in the hand is turned to the camera, as the counts of slots that ask for it, no longer lying flat
+  (`"carry_count_facing": "up"` keeps the old look).
 ### Fixed
 - Enchanted items in a scene show their glint again: it was drawn before the items and hidden by the depth test.
 - Stack counts drawn on top are no longer cut by a block standing in front of them: a log in a furnace showed "4" for 54.

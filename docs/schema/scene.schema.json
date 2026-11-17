@@ -1975,6 +1975,16 @@
           "$ref": "#/definitions/color",
           "description": "Colour of that outline.",
           "default": "#FFE6E6E6"
+        },
+        "carry_count_facing": {
+          "type": "string",
+          "enum": [
+            "up",
+            "front",
+            "camera"
+          ],
+          "description": "Which way the held stack's count faces: turned to the camera, lying flat or standing towards the front.",
+          "default": "camera"
         }
       },
       "patternProperties": {
@@ -5573,6 +5583,24 @@
             }
           ],
           "description": "Colour of that outline."
+        },
+        "carry_count_facing": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "up",
+                "front",
+                "camera"
+              ],
+              "description": "Which way the held stack's count faces: turned to the camera, lying flat or standing towards the front.",
+              "default": "camera"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Which way the held stack's count faces: turned to the camera, lying flat or standing towards the front."
         }
       },
       "patternProperties": {

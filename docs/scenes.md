@@ -470,6 +470,7 @@ Every field is optional.
 | `sounds` | `true` | The library's quiet sounds for picking up, putting down and controls. |
 | `hover_outline` | `true` | Outline the usable object under the cursor while the hand is empty. |
 | `outline_color` | `"#FFE6E6E6"` | Colour of that outline. |
+| `carry_count_facing` | `"camera"` | Which way the held stack's count faces: `camera` (turned to the camera, as a name tag), `up` (lying over the stack) or `front` (standing towards the front). |
 
 ## clear_view
 

@@ -469,11 +469,12 @@ public final class SceneRenderer {
             Vector3fc at = carried.stationPos();
             poseStack.translate(at.x(), at.y() + 0.4F, at.z());
             int left = input.spreadLeft();
-            if (left >= 0) {
-                // A drag over several slots: what stays in the hand once it is let go.
-                renderCount(poseStack, buffers, String.valueOf(left), carried.size() * 1.1F);
-            } else {
-                renderCount(poseStack, buffers, carried.stack(), carried.size() * 1.1F);
+            // A drag over several slots: what stays in the hand once it is let go.
+            int count = left >= 0 ? left : carried.stack().getCount();
+            if (left >= 0 || count > 1) {
+                SlotBinding.CountFacing facing = scene.definition().ui().carryCountFacing();
+                renderCount(poseStack, buffers, String.valueOf(count), carried.size() * 1.1F, facing != SlotBinding.CountFacing.UP, -1.0F,
+                        facing == SlotBinding.CountFacing.CAMERA);
             }
             poseStack.popPose();
         }

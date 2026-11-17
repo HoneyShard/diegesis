@@ -47,8 +47,13 @@ public final class MenuSession implements MenuAccess {
     private record Stale(MenuBinding binding, int armedAt) {
     }
 
+    /** The use of a station gone over to, waiting for the answer to an earlier use. */
+    private record PendingUse(ClientStation station, Runnable use) {
+    }
+
     private Expect expect;
     private final Deque<Stale> stale = new ArrayDeque<>();
+    private PendingUse pendingUse;
     private ClientStation station;
     private MenuBinding binding;
     private AbstractContainerMenu menu;
@@ -78,6 +83,32 @@ public final class MenuSession implements MenuAccess {
         autoMoves.clear();
     }
 
+    /**
+     * Going over to {@code target}: {@code use} sends its block's use. It goes at once, or, while an earlier use is still
+     * unanswered, once that answer has come and been closed: the server's close takes whatever menu is open, so a close sent
+     * after the next use would shut the next station's menu.
+     */
+    public void useNext(ClientStation target, Runnable use) {
+        pendingUse = null;
+        if (expect == null && stale.isEmpty()) {
+            arm(target);
+            use.run();
+            return;
+        }
+        pendingUse = new PendingUse(target, use);
+    }
+
+    /** Sends the waiting use once nothing is unanswered any more. */
+    private void sendPendingUse() {
+        if (pendingUse == null || expect != null || !stale.isEmpty()) {
+            return;
+        }
+        PendingUse next = pendingUse;
+        pendingUse = null;
+        arm(next.station());
+        next.use().run();
+    }
+
     /** Whether {@code target}'s menu is open now. */
     public boolean isOpenAt(ClientStation target) {
         return station == target && menu != null;
@@ -98,6 +129,7 @@ public final class MenuSession implements MenuAccess {
             // The answer to a use whose station is already left.
             stale.removeFirst();
             player.connection.send(new ServerboundContainerClosePacket(containerId));
+            sendPendingUse();
             return true;
         }
         Expect wanted = expect;
@@ -135,6 +167,9 @@ public final class MenuSession implements MenuAccess {
 
     /** The player left the station (any way but the server's close): its menu is closed on the server too. */
     public void leave(ClientStation left) {
+        if (pendingUse != null && pendingUse.station() == left) {
+            pendingUse = null;
+        }
         if (expect != null && expect.station() == left) {
             stale.add(new Stale(expect.binding(), expect.armedAt()));
             expect = null;
@@ -168,6 +203,7 @@ public final class MenuSession implements MenuAccess {
     public void reset() {
         expect = null;
         stale.clear();
+        pendingUse = null;
         menu = null;
         station = null;
         binding = null;
@@ -194,6 +230,7 @@ public final class MenuSession implements MenuAccess {
             expect = null;
             refuse(late.station(), MenuRefusal.TIMEOUT);
         }
+        sendPendingUse();
         if (menu == null) {
             return;
         }

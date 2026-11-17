@@ -493,6 +493,9 @@ obj("interface", "InterfaceOptions", "How the interface behaves and looks; every
     "sounds": field(BOOL, "The library's quiet sounds for picking up, putting down and controls.", True),
     "hover_outline": field(BOOL, "Outline the usable object under the cursor.", True),
     "outline_color": field(COLOR, "Colour of that outline.", "#FFE6E6E6"),
+    "carry_count_facing": field({"type": "string", "enum": ["up", "front", "camera"]},
+                                "Which way the held stack's count faces: turned to the camera, lying flat or standing"
+                                " towards the front.", "camera"),
 })
 
 TYPES = {
