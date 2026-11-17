@@ -40,6 +40,7 @@ public final class SceneInstance {
     private PlacedPhysics physics;
     /** Whether the placing's items are drawn (see {@code StationView.setPlacingVisible}). */
     private boolean placingVisible = true;
+    private boolean placingReachable = true;
     /** Per surface of the placing, whether it is shut away (see {@code StationView.setSurfaceVisible}). */
     private boolean[] surfaceHidden = new boolean[0];
     private PlacingOptions placingOptions;
@@ -124,7 +125,11 @@ public final class SceneInstance {
             }
         }
         float own = shape.isFlat() ? least : 0.0F;
-        return Placing.freeSpot(options, shape, open, taken, own);
+        float cameraX = definition().camera().position().x();
+        if (!Float.isNaN(station.cameraMirror())) {
+            cameraX = 2.0F * station.cameraMirror() - cameraX;
+        }
+        return Placing.freeSpot(options, shape, open, taken, own, cameraX);
     }
 
     /** Whether the placing has room for {@code stack} somewhere on its surfaces shown now (see {@code StationView.hasRoomFor}). */
@@ -148,6 +153,15 @@ public final class SceneInstance {
 
     public boolean isPlacingVisible() {
         return placingVisible;
+    }
+
+    public void setPlacingReachable(boolean reachable) {
+        placingReachable = reachable;
+    }
+
+    /** Whether the placing's items can be picked and its surfaces take items (see {@code StationView.setPlacingReachable}). */
+    public boolean isPlacingReachable() {
+        return placingReachable;
     }
 
     public void setSurfaceVisible(int surface, boolean visible) {
@@ -307,7 +321,7 @@ public final class SceneInstance {
         Vector3f localDirection = new Vector3f();
         for (NodeInstance node : byId.values()) {
             Box box = node.collider();
-            if (box == null || !node.isVisible() || !filter.test(node)) {
+            if (box == null || !node.isVisible() || !filter.test(node) || !placingReachable && node.placed() != null) {
                 continue;
             }
             node.pickMatrix().invert(inverse);

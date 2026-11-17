@@ -529,7 +529,7 @@ public final class FocusScreen extends Screen {
         }
         // A neighbour's arrow shows only as the cursor comes near its edge: a kitchen is not to be full of arrows.
         for (Neighbors.Neighbor neighbor : input.neighbors().found().values()) {
-            if (neighbor.rules().hint()) {
+            if (neighbor.rules().hint() && neighbor.pointer()) {
                 renderHint(graphics, neighbor.rules().hintColor(), neighbor.edge(), neighbor.rules().zone(), 1.0F - away, 0.0F, u, v);
             }
         }

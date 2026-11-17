@@ -166,6 +166,14 @@ public interface StationView {
     }
 
     /**
+     * Whether the items of the scene's {@code placing} can be reached: picked up, moved, and the surfaces take what the hand
+     * carries. Off while they are seen but out of reach, behind the shut glass door of an oven. On by default; set it every
+     * frame it should hold.
+     */
+    default void setPlacingReachable(boolean reachable) {
+    }
+
+    /**
      * Whether the items on one surface of the scene's {@code placing} are drawn, and the surface takes any: off while that
      * surface is shut away (one of two drawers pushed in) and the rest are open. On by default; kept until set again.
      *

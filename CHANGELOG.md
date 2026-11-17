@@ -4,6 +4,18 @@ All notable changes to this mod are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-beta.12+1.20.1] - Unreleased
+### Added
+- `StationView.setPlacingReachable`: placed items stay in sight but out of reach, behind the shut glass door of an oven.
+### Fixed
+- A block beside the station no longer disappears when the camera only looks past its corner: `clear_view` leaves out
+  only blocks that stand in the way.
+- A station straight above or below (a fridge on its freezer) is reached from the top or bottom edge of the screen, by
+  the cursor or by W and S, no longer from the left edge.
+- A neighbour on the side of the inventory drawer is reached by its key, where the cursor would be over the inventory.
+- Items that come into a `placing` without a place (a shift-click, a hopper) stand in the middle of a row first, where
+  they are seen.
+
 ## [1.0.0-beta.11+1.20.1] - 2026-11-16
 ### Added
 - `placing.physics`: placed items have weight. They fall, tip over, push each other and drop off open edges into the

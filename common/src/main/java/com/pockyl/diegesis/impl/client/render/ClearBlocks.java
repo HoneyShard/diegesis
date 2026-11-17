@@ -1,5 +1,6 @@
 package com.pockyl.diegesis.impl.client.render;
 
+import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongIterator;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.client.Minecraft;
@@ -24,7 +25,9 @@ import com.pockyl.diegesis.impl.client.ClientStation;
 /**
  * Leaves blocks in the camera's way out of the picture while a player works at a station ({@link ClearViewOptions#blocks()}): the
  * blocks the camera stands in, from any shot of the scene, and the blocks between it and the station's work surface, such as a
- * wall cabinet over a counter or a low ceiling. Chunk meshes are built as if those blocks were air (the game's, and Embeddium's or
+ * wall cabinet over a counter or a low ceiling. A block counts as in the way when it stands before the point the camera looks
+ * at, or before a good part of the work surface: a neighbour whose corner only grazes the view past the station's side (a
+ * cabinet beside the one worked at, seen from three-quarters) stays. Chunk meshes are built as if those blocks were air (the game's, and Embeddium's or
  * Sodium's through their world slice), so the faces of their neighbours show and nothing is left hollow; light stays the world's,
  * so the station keeps the shade a cabinet gives it. Nobody else sees a change.
  *
@@ -37,7 +40,13 @@ public final class ClearBlocks {
     /** Seconds between checks: a block placed or broken meanwhile. */
     private static final float RECHECK = 0.5F;
     /** Where the work surface is checked across the block, pixels from its side. */
-    private static final float[] GRID = {2.0F, 8.0F, 14.0F};
+    private static final float[] GRID = {2.0F, 5.0F, 8.0F, 11.0F, 14.0F};
+    /**
+     * The share of the lines to the work surface a block must stand in before it is left out. Owner, 2026-11-17: a block
+     * disappears only when it is in the way of the view; a neighbour that cuts the lines to the far corner of the surface
+     * behind the station's own side wall is not.
+     */
+    private static final float IN_THE_WAY = 1.0F / 3.0F;
     /** How high things lying on the surface stand, pixels: their tops must show too. */
     private static final float RISE = 4.0F;
     private static final LongOpenHashSet NONE = new LongOpenHashSet();
@@ -152,14 +161,29 @@ public final class ClearBlocks {
                 }
             }
         }
+        // What stands before the point looked at is in the way; before the rest of the surface, only what covers a good part of it.
         sight(level, own, camera, station.toWorld(target.x(), target.y(), target.z()), context, found);
+        Long2IntOpenHashMap cut = new Long2IntOpenHashMap();
+        LongOpenHashSet line = new LongOpenHashSet();
+        int lines = 0;
         for (float rise : new float[] {0.0F, RISE}) {
             for (float x : GRID) {
                 for (float z : GRID) {
-                    sight(level, own, camera, station.toWorld(x, target.y() + rise, z), context, found);
+                    line.clear();
+                    sight(level, own, camera, station.toWorld(x, target.y() + rise, z), context, line);
+                    for (LongIterator it = line.iterator(); it.hasNext(); ) {
+                        cut.addTo(it.nextLong(), 1);
+                    }
+                    lines++;
                 }
             }
         }
+        int needed = (int) Math.ceil(lines * IN_THE_WAY);
+        cut.long2IntEntrySet().forEach(entry -> {
+            if (entry.getIntValue() >= needed) {
+                found.add(entry.getLongKey());
+            }
+        });
     }
 
     /** Every block whose visual shape the line from {@code from} to {@code to} passes through. */

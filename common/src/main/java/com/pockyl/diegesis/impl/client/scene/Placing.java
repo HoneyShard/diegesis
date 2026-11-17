@@ -159,12 +159,15 @@ public final class Placing {
     /**
      * A free place for an item nobody put down by hand (shift-clicked in, brought by a hopper): the first spot on {@code surfaces}
      * where it stands clear of the boxes {@code taken} (each {min x, max x, min y, max y, min z, max z}), searched from the back of
-     * each surface to the front, so the newest stands in front where it is seen. At its full size where it fits, else smaller,
-     * down to the least of {@code scale_range}. Null when there is no room left: the station is full.
+     * each surface to the front, so the newest stands in front where it is seen, and along each row from its middle out, to the
+     * side away from the camera first. At its full size where it fits, else smaller, down to the least of {@code scale_range}.
+     * Null when there is no room left: the station is full.
      *
-     * @param least the least half width and depth the item takes (a flat icon's collision depth)
+     * @param least   the least half width and depth the item takes (a flat icon's collision depth)
+     * @param cameraX the camera's x in station pixels, or NaN when unknown
      */
-    public static ItemPose freeSpot(PlacingOptions options, PlacedShape shape, List<PlaceSurface> surfaces, List<float[]> taken, float least) {
+    public static ItemPose freeSpot(PlacingOptions options, PlacedShape shape, List<PlaceSurface> surfaces, List<float[]> taken, float least,
+            float cameraX) {
         Quaternionf upright = new Quaternionf();
         float smallest = Math.min(1.0F, options.scaleRange()[0]);
         for (float scale = 1.0F; scale >= smallest - 1.0e-4F; scale -= SPOT_SHRINK) {
@@ -177,8 +180,19 @@ public final class Placing {
                 }
                 float bottom = surface.height();
                 float top = bottom + extents.y * 2.0F;
+                float lowX = surface.from().x() + halfX;
+                float highX = surface.to().x() - halfX;
+                if (lowX > highX + 1.0e-3F) {
+                    continue;
+                }
+                float middle = (lowX + highX) / 2.0F;
+                float farSide = !Float.isNaN(cameraX) && cameraX > middle ? -1.0F : 1.0F;
+                int steps = (int) Math.floor((highX - lowX) / 2.0F / SPOT_STEP + 1.0e-3F);
                 for (float z = surface.to().y() - halfZ; z >= surface.from().y() + halfZ - 1.0e-3F; z -= SPOT_STEP) {
-                    for (float x = surface.from().x() + halfX; x <= surface.to().x() - halfX + 1.0e-3F; x += SPOT_STEP) {
+                    // Each row from its middle out to both sides, the far side first: a camera from a front corner sees the
+                    // middle and the far side, while the side nearest it hides behind that side's wall.
+                    for (int step = 0; step <= steps * 2; step++) {
+                        float x = middle + (step % 2 == 1 ? farSide : -farSide) * ((step + 1) / 2) * SPOT_STEP;
                         if (clear(taken, x - halfX, x + halfX, bottom, top, z - halfZ, z + halfZ)) {
                             return new ItemPose(x, bottom, z, extents.y, upright, scale, -1);
                         }
