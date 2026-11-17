@@ -4,6 +4,18 @@ All notable changes to this mod are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-beta.13+1.20.1] - Unreleased
+### Added
+- Slot option `idle_highlight`: the slot's square shows faintly while the cursor is elsewhere, so the places to put things
+  are seen at a glance.
+- `NodeView.setTooltipItem`: a node that draws an item itself (a result hovering over the work) shows its tooltip and takes
+  recipe viewers' keys, as a slot does.
+- `DiegesisClient.items(buffers)`: buffers for an item a node painter draws, with depth and its enchantment glint.
+### Changed
+- The square under the cursor on an `upright` slot stands in the item's plane, behind it, no longer flat at its foot.
+### Fixed
+- Enchanted items in a scene show their glint again: it was drawn before the items and hidden by the depth test.
+
 ## [1.0.0-beta.12+1.20.1] - 2026-11-17
 ### Added
 - `StationView.setPlacingReachable`: placed items stay in sight but out of reach, behind the shut glass door of an oven.

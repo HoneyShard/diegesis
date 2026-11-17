@@ -196,6 +196,12 @@ public final class SceneRenderer {
                     Sheets.translucentCullBlockSheet())) {
                 kept.put(type, new BufferBuilder(1 << 16));
             }
+            // Enchantment glints test for the very depth their item wrote: kept apart, they are drawn after the items, as the
+            // game keeps them; in the shared buffer they went out first, before any item, and showed nowhere.
+            for (RenderType type : List.of(RenderType.glint(), RenderType.glintDirect(), RenderType.glintTranslucent(),
+                    RenderType.entityGlint(), RenderType.entityGlintDirect())) {
+                kept.put(type, new BufferBuilder(1 << 12));
+            }
             sceneBuffers = MultiBufferSource.immediateWithBuffers(kept, new BufferBuilder(1 << 16));
         }
         RenderType translucent = Sheets.translucentCullBlockSheet();
@@ -413,8 +419,14 @@ public final class SceneRenderer {
             }
             definition.slot().ifPresent(slot -> {
                 boolean marked = local && (node.isHovered() || input.isSpreadTarget(new Target.Station(slot.slot())));
-                if (marked && slot.highlight()) {
-                    renderHighlight(poseStack, buffers, slot.size() + 0.2F, node.isHovered() ? 1.0F : 0.66F);
+                float strength = marked ? node.isHovered() ? 1.0F : 0.66F : local && station.isInUse() ? slot.idleHighlight() : 0.0F;
+                if (strength > 0.0F && slot.highlight()) {
+                    if (slot.display() == SlotBinding.ItemDisplay.UPRIGHT) {
+                        // An item standing up is marked in its own plane, behind it, not on the ground at its foot.
+                        renderStandingHighlight(poseStack, buffers, slot.size() + 0.2F, strength);
+                    } else {
+                        renderHighlight(poseStack, buffers, slot.size() + 0.2F, strength);
+                    }
                 }
                 ItemStack stack = station.state().getItem(slot.slot());
                 ItemStack spread = local ? input.spreadPreview(new Target.Station(slot.slot())) : ItemStack.EMPTY;
@@ -1022,6 +1034,33 @@ public final class SceneRenderer {
         int color = ui.highlightColor();
         int alpha = Math.round((color >>> 24) * strength);
         renderSquare(poseStack, buffers, size, alpha << 24 | color & 0xFFFFFF);
+    }
+
+    /** The highlight of a slot whose item stands up: a square in the item's plane, from its foot up, just behind it. */
+    private static void renderStandingHighlight(PoseStack poseStack, MultiBufferSource buffers, float size, float strength) {
+        int color = ui.highlightColor();
+        int argb = Math.round((color >>> 24) * strength) << 24 | color & 0xFFFFFF;
+        TextureAtlasSprite sprite = Minecraft.getInstance().getTextureAtlas(TextureAtlas.LOCATION_BLOCKS).apply(HIGHLIGHT_SPRITE);
+        VertexConsumer consumer = buffers.getBuffer(OVERLAY);
+        PoseStack.Pose pose = poseStack.last();
+        float h = size / 2.0F;
+        float z = size * 0.08F;
+        // Both faces: a behaviour may turn the node so that the camera sees it from behind.
+        standingVertex(consumer, pose, -h, 0.0F, z, sprite.getU0(), sprite.getV1(), argb);
+        standingVertex(consumer, pose, -h, size, z, sprite.getU0(), sprite.getV0(), argb);
+        standingVertex(consumer, pose, h, size, z, sprite.getU1(), sprite.getV0(), argb);
+        standingVertex(consumer, pose, h, 0.0F, z, sprite.getU1(), sprite.getV1(), argb);
+        standingVertex(consumer, pose, h, 0.0F, z, sprite.getU1(), sprite.getV1(), argb);
+        standingVertex(consumer, pose, h, size, z, sprite.getU1(), sprite.getV0(), argb);
+        standingVertex(consumer, pose, -h, size, z, sprite.getU0(), sprite.getV0(), argb);
+        standingVertex(consumer, pose, -h, 0.0F, z, sprite.getU0(), sprite.getV1(), argb);
+    }
+
+    private static void standingVertex(VertexConsumer consumer, PoseStack.Pose pose, float x, float y, float z, float u, float v, int argb) {
+        Vector3f point = pose.pose().transformPosition(new Vector3f(x, y, z));
+        Vector3f normal = pose.normal().transform(new Vector3f(0.0F, 0.0F, -1.0F));
+        consumer.vertex(point.x, point.y, point.z, (argb >> 16 & 0xFF) / 255.0F, (argb >> 8 & 0xFF) / 255.0F, (argb & 0xFF) / 255.0F,
+                (argb >>> 24) / 255.0F, u, v, OverlayTexture.NO_OVERLAY, LightTexture.FULL_BRIGHT, normal.x, normal.y, normal.z);
     }
 
     /** A flat square of colour on the surface at the slot (wells, highlights). */

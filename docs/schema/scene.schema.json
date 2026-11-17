@@ -1375,6 +1375,13 @@
           ],
           "description": "up: the count lies on the slot; front: it stands at the item's foot facing the front; camera: at the item's foot, always turned to the camera like a name tag.",
           "default": "up"
+        },
+        "idle_highlight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How strongly the square shows while the cursor is elsewhere, 0..1 of the hovered one.",
+          "default": 0
         }
       },
       "patternProperties": {
@@ -4354,6 +4361,21 @@
             }
           ],
           "description": "up: the count lies on the slot; front: it stands at the item's foot facing the front; camera: at the item's foot, always turned to the camera like a name tag."
+        },
+        "idle_highlight": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "How strongly the square shows while the cursor is elsewhere, 0..1 of the hovered one.",
+              "default": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How strongly the square shows while the cursor is elsewhere, 0..1 of the hovered one."
         }
       },
       "patternProperties": {

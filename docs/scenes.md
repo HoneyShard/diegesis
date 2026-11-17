@@ -259,7 +259,8 @@ gathers, dragging over several slots spreads.
 | `size` | `6` | Size of the slot (drop zone, highlight), 1..64; also of the item without `item_size`. |
 | `item_size` | `size` | Size of the shown item when it differs. |
 | `counts` | `"always"` | When the stack's count is drawn: `always`, `hover` (slots close together stay readable), `never`. |
-| `highlight` | `true` | The square over the slot under the cursor. Off for things that are no slots to the eye, like food in a pot; the hover outline stays. |
+| `highlight` | `true` | The square over the slot under the cursor. Off for things that are no slots to the eye, like food in a pot; the hover outline stays. An `upright` slot's square stands in the item's plane, behind it. |
+| `idle_highlight` | `0` | How strongly the square shows while the cursor is elsewhere, 0..1 of the hovered one, so the places to put things are seen at a glance. |
 | `count_facing` | `"up"` | `up`: the count lies on the slot, read from above; `front`: it stands at the item's foot facing the block's front, for an item standing in a hollow the camera looks into (a furnace's mouth); `camera`: at the item's foot, always turned to the camera like a name tag. |
 
 A slot node needs no visual: it is an invisible pad on the surface. Put it where the block's texture shows a cell.
