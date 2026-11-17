@@ -169,6 +169,11 @@ public final class ClientStations {
                         continue;
                     }
                     StationRegistry.find(blockEntity.getBlockState()).ifPresent(type -> {
+                        // A block of a multiblock whose station lives at another block shows nothing of its own: its main block's
+                        // scene stands in for all of them.
+                        if (!type.anchor().resolve(level, pos, blockEntity.getBlockState()).equals(pos)) {
+                            return;
+                        }
                         SceneDefinition scene = SceneLibrary.INSTANCE.scene(type.scene());
                         if (scene != null && scene.idleVisible() && !scene.nodes().isEmpty()) {
                             Direction facing = type.orientation().resolve(blockEntity.getBlockState(), Direction.NORTH);
