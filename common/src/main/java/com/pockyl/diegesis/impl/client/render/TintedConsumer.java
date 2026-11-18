@@ -35,6 +35,11 @@ public final class TintedConsumer implements VertexConsumer {
     }
 
     @Override
+    public VertexConsumer setColor(int argb) {
+        return setColor(argb >> 16 & 0xFF, argb >> 8 & 0xFF, argb & 0xFF, argb >>> 24);
+    }
+
+    @Override
     public VertexConsumer setUv(float u, float v) {
         delegate.setUv(u, v);
         return this;
@@ -49,6 +54,18 @@ public final class TintedConsumer implements VertexConsumer {
     @Override
     public VertexConsumer setUv2(int u, int v) {
         delegate.setUv2(u, v);
+        return this;
+    }
+
+    @Override
+    public VertexConsumer setLineWidth(float width) {
+        delegate.setLineWidth(width);
+        return this;
+    }
+
+    @Override
+    public VertexConsumer setUv3(float u, float v) {
+        delegate.setUv3(u, v);
         return this;
     }
 

@@ -4,7 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.level.block.state.BlockState;
@@ -28,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /** The client half of the library: wiring called by the loaders, and the hook that turns a block use into a station. */
 public final class DiegesisClientRuntime {
     /** Station types whose open condition threw, each logged once. */
-    private static final Set<ResourceLocation> FAILED_CONDITIONS = ConcurrentHashMap.newKeySet();
+    private static final Set<Identifier> FAILED_CONDITIONS = ConcurrentHashMap.newKeySet();
     /** The use being sent is the menu of a station gone over to: {@link #onUseBlock} lets it through. */
     private static boolean usingForMenu;
 
@@ -129,7 +129,7 @@ public final class DiegesisClientRuntime {
     /** The client's station at {@code pos}, facing as it opens for the player, in the seat they would likely get. */
     private static ClientStation prepare(LocalPlayer player, StationType type, BlockPos pos, BlockState state) {
         Vec3 from = SubLevels.toLevel(player.level(), pos, player.position(), true);
-        Direction towardsPlayer = Direction.getNearest(from.x - pos.getX() - 0.5, 0.0, from.z - pos.getZ() - 0.5);
+        Direction towardsPlayer = Direction.getApproximateNearest(from.x - pos.getX() - 0.5, 0.0, from.z - pos.getZ() - 0.5);
         if (!towardsPlayer.getAxis().isHorizontal()) {
             towardsPlayer = player.getDirection().getOpposite();
         }
@@ -188,8 +188,8 @@ public final class DiegesisClientRuntime {
             return;
         }
         net.minecraft.world.phys.Vec3 eye = player.getEyePosition();
-        net.minecraft.world.phys.Vec3 center = pos.getCenter();
-        Direction face = Direction.getNearest(eye.x - center.x, eye.y - center.y, eye.z - center.z);
+        net.minecraft.world.phys.Vec3 center = net.minecraft.world.phys.Vec3.atCenterOf(pos);
+        Direction face = Direction.getApproximateNearest(eye.x - center.x, eye.y - center.y, eye.z - center.z);
         net.minecraft.world.phys.Vec3 at = center.add(face.getStepX() * 0.5, face.getStepY() * 0.5, face.getStepZ() * 0.5);
         usingForMenu = true;
         try {

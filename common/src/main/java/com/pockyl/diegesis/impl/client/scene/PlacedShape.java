@@ -4,19 +4,12 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.ItemBlockRenderTypes;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.Sheets;
-import net.minecraft.client.renderer.block.model.BakedQuad;
-import net.minecraft.client.renderer.block.model.ItemTransform;
+import com.pockyl.diegesis.api.client.SceneBuffers;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.client.resources.model.BakedModel;
-import net.minecraft.core.Direction;
-import net.minecraft.util.RandomSource;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
+import net.minecraft.client.renderer.item.TrackingItemStackRenderState;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemDisplayContext;
-import net.minecraft.world.item.ItemNameBlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.AbstractCandleBlock;
 import net.minecraft.world.level.block.RenderShape;
@@ -29,6 +22,8 @@ import org.joml.Quaternionfc;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -38,16 +33,16 @@ import java.util.concurrent.ConcurrentHashMap;
  * stands on its lowest point whichever way it is turned, and an apple that fills half its icon is as big as a sword.
  */
 public final class PlacedShape {
-    /** Integers per vertex in a baked quad (position, colour, uv, light, normal). */
-    private static final int VERTEX_STRIDE = 8;
     private static final float THINNEST = 0.012F;
     /** A block's longest side counts for less than a sword's: it fills all of its box. */
     private static final float SOLID_SIZE = 0.8F;
-    private static final Map<BakedModel, PlacedShape> CACHE = new ConcurrentHashMap<>();
+    /** Shapes by what they are drawn from: a block's model, or an item's look (the game's identity of an item's models). */
+    private static final Map<Object, PlacedShape> CACHE = new ConcurrentHashMap<>();
     /** Shapes of 3D item models standing as modelled (no frame transform). */
-    private static final Map<BakedModel, PlacedShape> MODELLED = new ConcurrentHashMap<>();
+    private static final Map<Object, PlacedShape> MODELLED = new ConcurrentHashMap<>();
 
-    private final BakedModel model;
+    /** The block's model, for an item standing as its block; null for an item drawn as an item. */
+    private final BlockStateModel model;
     private final BlockState block;
     private final boolean translucent;
     private final Vector3f center;
@@ -55,7 +50,6 @@ public final class PlacedShape {
     private final float unit;
     private final int light;
     private final boolean flame;
-    private final boolean custom;
     /** How an item model is drawn: as an item frame shows it, or as it is modelled. */
     private final ItemDisplayContext context;
     /**
@@ -65,15 +59,15 @@ public final class PlacedShape {
     private final Vector3f hitHalf;
     private final Quaternionf hitTurn;
 
-    private PlacedShape(BakedModel model, BlockState block, Box3 box, int light, boolean flame, ItemDisplayContext context) {
+    private PlacedShape(BlockStateModel model, BlockState block, Box3 box, int light, boolean flame, ItemDisplayContext context) {
         this(model, block, box, null, light, flame, context);
     }
 
-    private PlacedShape(BakedModel model, BlockState block, Box3 box, Fit fit, int light, boolean flame, ItemDisplayContext context) {
+    private PlacedShape(BlockStateModel model, BlockState block, Box3 box, Fit fit, int light, boolean flame, ItemDisplayContext context) {
         this.context = context;
         this.model = model;
         this.block = block;
-        this.translucent = block != null && ItemBlockRenderTypes.getChunkRenderType(block) == RenderType.translucent();
+        this.translucent = block != null && com.pockyl.diegesis.impl.client.render.SceneDraw.isTranslucent(model);
         this.center = new Vector3f(box.min).add(box.max).mul(0.5F);
         this.half = new Vector3f(box.max).sub(box.min).mul(0.5F).max(new Vector3f(THINNEST));
         float longest = Math.max(half.x, Math.max(half.y, half.z));
@@ -81,7 +75,6 @@ public final class PlacedShape {
         this.unit = (solid ? SOLID_SIZE : 1.0F) * 0.5F / longest;
         this.light = light;
         this.flame = flame;
-        this.custom = model.isCustomRenderer();
         this.hitHalf = fit == null ? new Vector3f(half) : new Vector3f(fit.half()).max(new Vector3f(THINNEST));
         this.hitTurn = fit == null ? new Quaternionf() : new Quaternionf(fit.turn());
     }
@@ -113,47 +106,162 @@ public final class PlacedShape {
      *                  its back so that it faces out of the wall)
      */
     public static PlacedShape of(ItemStack stack, ClientLevel level, boolean blockModels, boolean framePose) {
-        BakedModel icon = Minecraft.getInstance().getItemRenderer().getModel(stack, level, null, 0);
+        TrackingItemStackRenderState icon = new TrackingItemStackRenderState();
+        Minecraft.getInstance().getItemModelResolver().updateForTopItem(icon, stack, ItemDisplayContext.FIXED, level, null, 0);
+        // A 3D item model (a block's, a modelled thing's) is lit as a block; a flat icon is not.
+        boolean gui3d = icon.usesBlockLight();
         BlockState state = stack.getItem() instanceof BlockItem item ? item.getBlock().defaultBlockState() : null;
         if (state != null && state.hasProperty(BlockStateProperties.LIT)) {
             state = state.setValue(BlockStateProperties.LIT, true);
         }
         int light = state == null ? 0 : state.getLightEmission();
         boolean flame = state != null && (state.getBlock() instanceof TorchBlock || state.getBlock() instanceof AbstractCandleBlock);
-        if (blockModels && standsAsBlock(stack, icon, state)) {
-            BakedModel model = Minecraft.getInstance().getBlockRenderer().getBlockModel(state);
+        if (blockModels && standsAsBlock(stack, gui3d, state)) {
+            BlockStateModel model = com.pockyl.diegesis.impl.client.render.SceneDraw.blockModel(state);
             BlockState shown = state;
-            return CACHE.computeIfAbsent(model, key -> new PlacedShape(key, shown, blockBox(key, shown), light, flame, ItemDisplayContext.FIXED));
+            return CACHE.computeIfAbsent(model, key -> new PlacedShape(model, shown, blockBox(model), light, flame, ItemDisplayContext.FIXED));
         }
-        if (!framePose && icon.isGui3d() && !icon.isCustomRenderer()) {
-            return MODELLED.computeIfAbsent(icon, key -> new PlacedShape(key, null, itemBox(key, ItemDisplayContext.NONE), light, flame,
-                    ItemDisplayContext.NONE));
+        if (!framePose && gui3d) {
+            TrackingItemStackRenderState modelled = new TrackingItemStackRenderState();
+            Minecraft.getInstance().getItemModelResolver().updateForTopItem(modelled, stack, ItemDisplayContext.NONE, level, null, 0);
+            return MODELLED.computeIfAbsent(List.copyOf((List<?>) modelled.getModelIdentity()), key -> new PlacedShape(null, null,
+                    itemBox(measure(stack, ItemDisplayContext.NONE, level), false), light, flame, ItemDisplayContext.NONE));
         }
-        return CACHE.computeIfAbsent(icon, key -> {
-            Box3 box = itemBox(key, ItemDisplayContext.FIXED);
-            return new PlacedShape(key, null, box, key.isGui3d() ? null : flatFit(key, ItemDisplayContext.FIXED, box), light, flame,
-                    ItemDisplayContext.FIXED);
+        return CACHE.computeIfAbsent(List.copyOf((List<?>) icon.getModelIdentity()), key -> {
+            List<float[]> quads = measure(stack, ItemDisplayContext.FIXED, level);
+            // A flat item's two big quads span the whole icon; the strips along its pixels' edges say what is really there.
+            Box3 box = itemBox(quads, !gui3d);
+            return new PlacedShape(null, null, box, gui3d ? null : flatFit(quads, box), light, flame, ItemDisplayContext.FIXED);
         });
     }
 
     /** Seeds, string and the like are items of a block that looks like nothing the player holds; doors are half a door. */
-    private static boolean standsAsBlock(ItemStack stack, BakedModel icon, BlockState state) {
-        return state != null && !icon.isGui3d() && !(stack.getItem() instanceof ItemNameBlockItem) && state.getRenderShape() == RenderShape.MODEL
+    private static boolean standsAsBlock(ItemStack stack, boolean gui3d, BlockState state) {
+        // An item named as an item, not after its block (seeds, string), is one of those: since 1.21.4 it says so in its name.
+        return state != null && !gui3d && !stack.getItem().getDescriptionId().startsWith("item.") && state.getRenderShape() == RenderShape.MODEL
                 && !state.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF);
     }
 
-    private static Box3 blockBox(BakedModel model, BlockState state) {
+    private static Box3 blockBox(BlockStateModel model) {
         Box3 box = new Box3();
-        quads(model, state, false, box::add);
+        com.pockyl.diegesis.impl.client.render.SceneDraw.forEachQuad(model, quad -> {
+            for (int vertex = 0; vertex < 4; vertex++) {
+                box.add(quad.position(vertex));
+            }
+        });
         return box.orElse(0.0F, 1.0F);
     }
 
-    /** The transform of {@code context} (the item frame's, or none) from the model into the space {@link #draw} starts from. */
-    private static Matrix4f transformOf(BakedModel model, ItemDisplayContext context) {
-        ItemTransform fixed = model.getTransforms().getTransform(context);
-        return new Matrix4f().translate(fixed.translation)
-                .rotateXYZ((float) Math.toRadians(fixed.rotation.x()), (float) Math.toRadians(fixed.rotation.y()), (float) Math.toRadians(fixed.rotation.z()))
-                .scale(fixed.scale).translate(-0.5F, -0.5F, -0.5F);
+    /**
+     * The item's quads as {@link #draw} draws it from an untouched pose (the space {@link #draw} starts from), each its four corners
+     * and its facing: twelve coordinates and a normal.
+     */
+    private static List<float[]> measure(ItemStack stack, ItemDisplayContext context, ClientLevel level) {
+        List<float[]> quads = new ArrayList<>();
+        QuadCollector collector = new QuadCollector(quads);
+        com.pockyl.diegesis.impl.client.render.SceneDraw.item(stack, context, 0, OverlayTexture.NO_OVERLAY, new PoseStack(),
+                type -> collector, level, 0);
+        collector.finish();
+        return quads;
+    }
+
+    /**
+     * Whether a measured quad is one of a flat icon's two big faces: facing as the biggest quad does. The rest are the strips along
+     * the edges of its pixels, which trace what is really there.
+     */
+    private static boolean isBigFace(float[] quad, Vector3fc bigFacing) {
+        return Math.abs(quad[12] * bigFacing.x() + quad[13] * bigFacing.y() + quad[14] * bigFacing.z()) > 0.99F;
+    }
+
+    /** The facing of the biggest of the quads. */
+    private static Vector3f bigFacing(List<float[]> quads) {
+        Vector3f best = new Vector3f(0.0F, 0.0F, 1.0F);
+        float bestArea = -1.0F;
+        for (float[] quad : quads) {
+            Vector3f a = new Vector3f(quad[3] - quad[0], quad[4] - quad[1], quad[5] - quad[2]);
+            Vector3f b = new Vector3f(quad[9] - quad[0], quad[10] - quad[1], quad[11] - quad[2]);
+            float area = a.cross(b).length();
+            if (area > bestArea) {
+                bestArea = area;
+                best.set(quad[12], quad[13], quad[14]);
+            }
+        }
+        return best.lengthSquared() > 0.0F ? best.normalize() : best;
+    }
+
+    /** Collects the corners and facing of every quad written into it. */
+    private static final class QuadCollector implements VertexConsumer {
+        private final List<float[]> quads;
+        private float[] quad = new float[15];
+        private int corner;
+
+        private QuadCollector(List<float[]> quads) {
+            this.quads = quads;
+        }
+
+        @Override
+        public VertexConsumer addVertex(float x, float y, float z) {
+            if (corner == 4) {
+                finish();
+            }
+            quad[corner * 3] = x;
+            quad[corner * 3 + 1] = y;
+            quad[corner * 3 + 2] = z;
+            corner++;
+            return this;
+        }
+
+        /** Keeps the quad being written, if it is whole. */
+        void finish() {
+            if (corner == 4) {
+                quads.add(quad);
+            }
+            quad = new float[15];
+            corner = 0;
+        }
+
+        @Override
+        public VertexConsumer setNormal(float x, float y, float z) {
+            quad[12] = x;
+            quad[13] = y;
+            quad[14] = z;
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setColor(int r, int g, int b, int a) {
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setColor(int color) {
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setUv(float u, float v) {
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setUv1(int u, int v) {
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setUv2(int u, int v) {
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setLineWidth(float width) {
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setUv3(float u, float v) {
+            return this;
+        }
     }
 
     /**
@@ -161,21 +269,16 @@ public final class PlacedShape {
      * is clearly smaller than the box: most food is drawn on the slant, and its square box would keep things a pixel or two
      * apart where they do not touch. Null for an icon drawn square.
      */
-    private static Fit flatFit(BakedModel model, ItemDisplayContext context, Box3 box) {
-        Matrix4f transform = transformOf(model, context);
-        java.util.List<Vector3f> points = new java.util.ArrayList<>();
-        RandomSource random = RandomSource.create(42L);
-        for (Direction side : new Direction[] {null, Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST}) {
-            for (BakedQuad quad : model.getQuads(null, side, random)) {
-                if (quad.getDirection().getAxis() == Direction.Axis.Z) {
-                    // The two big faces span the whole icon; the strips along the pixels' edges trace what is there.
-                    continue;
-                }
-                int[] vertices = quad.getVertices();
-                for (int i = 0; i + 2 < vertices.length; i += VERTEX_STRIDE) {
-                    points.add(transform.transformPosition(new Vector3f(Float.intBitsToFloat(vertices[i]), Float.intBitsToFloat(vertices[i + 1]),
-                            Float.intBitsToFloat(vertices[i + 2]))));
-                }
+    private static Fit flatFit(List<float[]> quads, Box3 box) {
+        List<Vector3f> points = new ArrayList<>();
+        Vector3f big = bigFacing(quads);
+        for (float[] quad : quads) {
+            if (isBigFace(quad, big)) {
+                // The two big faces span the whole icon; the strips along the pixels' edges trace what is there.
+                continue;
+            }
+            for (int corner = 0; corner < 4; corner++) {
+                points.add(new Vector3f(quad[corner * 3], quad[corner * 3 + 1], quad[corner * 3 + 2]));
             }
         }
         if (points.size() < 3 || box.isEmpty()) {
@@ -254,44 +357,22 @@ public final class PlacedShape {
         return new Fit(new Quaternionf().setFromNormalized(sides), half);
     }
 
-    /** The model's box after the transform of {@code context} (the item frame's, or none), in the space {@link #draw} starts from. */
-    private static Box3 itemBox(BakedModel model, ItemDisplayContext context) {
-        Matrix4f transform = transformOf(model, context);
-        Box3 model3 = new Box3();
-        // A flat item's two big quads span the whole icon; the strips along its pixels' edges say what is really there.
-        quads(model, null, !model.isGui3d(), model3::add);
-        Box3 local = model3.orElse(0.0F, 1.0F);
-        Box3 box = new Box3();
-        for (int corner = 0; corner < 8; corner++) {
-            Vector3f point = new Vector3f((corner & 1) == 0 ? local.min.x : local.max.x, (corner & 2) == 0 ? local.min.y : local.max.y,
-                    (corner & 4) == 0 ? local.min.z : local.max.z);
-            box.add(transform.transformPosition(point));
-        }
-        return box;
-    }
-
-    private static void quads(BakedModel model, BlockState state, boolean edgesOnly, java.util.function.Consumer<Vector3f> points) {
-        RandomSource random = RandomSource.create(42L);
+    /** The box round the measured quads; with {@code edgesOnly}, round all but a flat icon's two big faces where there are others. */
+    private static Box3 itemBox(List<float[]> quads, boolean edgesOnly) {
+        Vector3f big = bigFacing(quads);
         Box3 edges = new Box3();
         Box3 all = new Box3();
-        for (Direction side : new Direction[] {null, Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST}) {
-            for (BakedQuad quad : model.getQuads(state, side, random)) {
-                int[] vertices = quad.getVertices();
-                boolean big = quad.getDirection().getAxis() == Direction.Axis.Z;
-                for (int i = 0; i + 2 < vertices.length; i += VERTEX_STRIDE) {
-                    Vector3f point = new Vector3f(Float.intBitsToFloat(vertices[i]), Float.intBitsToFloat(vertices[i + 1]), Float.intBitsToFloat(vertices[i + 2]));
-                    all.add(point);
-                    if (!big) {
-                        edges.add(point);
-                    }
+        for (float[] quad : quads) {
+            boolean bigFace = isBigFace(quad, big);
+            for (int corner = 0; corner < 4; corner++) {
+                Vector3f point = new Vector3f(quad[corner * 3], quad[corner * 3 + 1], quad[corner * 3 + 2]);
+                all.add(point);
+                if (!bigFace) {
+                    edges.add(point);
                 }
             }
         }
-        Box3 used = edgesOnly && !edges.isEmpty() ? edges : all;
-        if (!used.isEmpty()) {
-            points.accept(used.min);
-            points.accept(used.max);
-        }
+        return (edgesOnly && !edges.isEmpty() ? edges : all).orElse(-0.5F, 0.5F);
     }
 
     /** Light the item gives, like a block's. */
@@ -304,9 +385,12 @@ public final class PlacedShape {
         return flame;
     }
 
-    /** Whether the item can be flattened into a shadow: what an entity renderer draws is on textures of its own. */
+    /**
+     * Whether the item can be flattened into a shadow. Every item can since Minecraft 26.x: what a special model draws (a chest, a
+     * shield) comes through the scene's buffers like the rest.
+     */
     public boolean castsShadow() {
-        return !custom;
+        return true;
     }
 
     /** The factor from the model to pixels for an item of {@code size} pixels. */
@@ -346,20 +430,19 @@ public final class PlacedShape {
     }
 
     /** Draws the item with its middle at the pose stack's origin; the stack is in model units. */
-    public void draw(ItemStack stack, PoseStack poseStack, MultiBufferSource buffers, int packedLight, ClientLevel level, int seed) {
+    public void draw(ItemStack stack, PoseStack poseStack, SceneBuffers buffers, int packedLight, ClientLevel level, int seed) {
         Minecraft minecraft = Minecraft.getInstance();
         poseStack.pushPose();
         poseStack.translate(-center.x, -center.y, -center.z);
         if (block != null) {
-            VertexConsumer consumer = buffers.getBuffer(translucent ? Sheets.translucentCullBlockSheet() : Sheets.cutoutBlockSheet());
-            int color = minecraft.getBlockColors().getColor(block, null, null, 0);
-            float red = color == -1 ? 1.0F : (color >> 16 & 0xFF) / 255.0F;
-            float green = color == -1 ? 1.0F : (color >> 8 & 0xFF) / 255.0F;
-            float blue = color == -1 ? 1.0F : (color & 0xFF) / 255.0F;
-            minecraft.getBlockRenderer().getModelRenderer().renderModel(poseStack.last(), consumer, block, model, red, green, blue, packedLight,
-                    OverlayTexture.NO_OVERLAY);
+            VertexConsumer consumer = buffers.getBuffer(translucent ? com.pockyl.diegesis.impl.client.render.DiegesisRenderTypes.translucentCullBlockSheet() : com.pockyl.diegesis.impl.client.render.DiegesisRenderTypes.cutoutBlockSheet());
+            // The block's tints as an item of it shows them (grass green, not the grass of a biome).
+            int[] tints = minecraft.getBlockColors().getTintSources(block).stream()
+                    .mapToInt(source -> source == null ? -1 : source.color(block)).toArray();
+            com.pockyl.diegesis.impl.client.render.BufferSubmits.putBlockModel(poseStack.last(), consumer,
+                    com.pockyl.diegesis.impl.client.render.SceneDraw.parts(model), tints, -1, packedLight, OverlayTexture.NO_OVERLAY);
         } else {
-            minecraft.getItemRenderer().renderStatic(stack, context, packedLight, OverlayTexture.NO_OVERLAY, poseStack,
+            com.pockyl.diegesis.impl.client.render.SceneDraw.item(stack, context, packedLight, OverlayTexture.NO_OVERLAY, poseStack,
                     com.pockyl.diegesis.impl.client.render.SceneRenderer.solidItems(buffers), level, seed);
         }
         poseStack.popPose();

@@ -1,7 +1,7 @@
 package com.pockyl.diegesis.impl.client.focus;
 
 import com.mojang.blaze3d.platform.Window;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
@@ -149,9 +149,9 @@ public final class FocusController {
         progress = 0.0F;
         lastFrameNanos = Util.getNanos();
         // Where the camera looked in the last frame: the player's eyes, or a third-person view of a camera mod.
-        startYaw = minecraft.gameRenderer.getMainCamera().getYRot();
-        startPitch = minecraft.gameRenderer.getMainCamera().getXRot();
-        savedHideGui = minecraft.options.hideGui;
+        startYaw = minecraft.gameRenderer.mainCamera().yRot();
+        startPitch = minecraft.gameRenderer.mainCamera().xRot();
+        savedHideGui = minecraft.gui.hud.isHidden();
         hudLeaves(minecraft);
         flightFrom = null;
         exitFrom = null;
@@ -168,7 +168,7 @@ public final class FocusController {
 
     private static void openScreen(Minecraft minecraft) {
         CameraMods.giveWay();
-        minecraft.setScreen(new FocusScreen());
+        minecraft.gui.setScreen(new FocusScreen());
     }
 
     /** Whether the camera is flying over to a neighbour. */
@@ -298,11 +298,11 @@ public final class FocusController {
         Minecraft minecraft = Minecraft.getInstance();
         if (!savedHideGui && sliding()) {
             // The HUD comes back while the camera flies back.
-            minecraft.options.hideGui = false;
+            setHudHidden(minecraft, false);
             HudSlide.in(hud());
         }
-        if (minecraft.screen instanceof FocusScreen) {
-            minecraft.setScreen(null);
+        if (minecraft.gui.screen() instanceof FocusScreen) {
+            minecraft.gui.setScreen(null);
         }
     }
 
@@ -314,10 +314,10 @@ public final class FocusController {
         HudSlide.keepHotbar(station != null && station.scene() != null
                 && station.scene().definition().inventoryDrawer().map(drawer -> drawer.keepsHotbar()).orElse(false));
         if (!savedHideGui && sliding()) {
-            minecraft.options.hideGui = false;
+            setHudHidden(minecraft, false);
             HudSlide.out(hud());
         } else {
-            minecraft.options.hideGui = true;
+            setHudHidden(minecraft, true);
         }
     }
 
@@ -333,7 +333,7 @@ public final class FocusController {
     /** Drops everything at once (level change, disconnect). */
     public void reset() {
         if (phase != Phase.IDLE) {
-            Minecraft.getInstance().options.hideGui = savedHideGui;
+            setHudHidden(Minecraft.getInstance(), savedHideGui);
         }
         HudSlide.reset();
         com.pockyl.diegesis.impl.client.menu.MenuSession.get().reset();
@@ -355,9 +355,9 @@ public final class FocusController {
         if (phase == Phase.IDLE) {
             return;
         }
-        if (phase != Phase.EXITING && HudSlide.gone() && !Minecraft.getInstance().options.hideGui) {
+        if (phase != Phase.EXITING && HudSlide.gone() && !Minecraft.getInstance().gui.hud.isHidden()) {
             // All of it is off the screen: hidden now, as F1 hides it.
-            Minecraft.getInstance().options.hideGui = true;
+            setHudHidden(Minecraft.getInstance(), true);
         }
         long now = Util.getNanos();
         float dt = Math.min((now - lastFrameNanos) / 1.0e9F, 0.1F);
@@ -384,7 +384,7 @@ public final class FocusController {
         } else if (phase == Phase.EXITING) {
             progress = Math.max(0.0F, progress - dt / duration);
             if (progress <= 0.0F) {
-                minecraft.options.hideGui = savedHideGui;
+                setHudHidden(minecraft, savedHideGui);
                 phase = Phase.IDLE;
                 station = null;
                 flightFromStation = null;
@@ -395,8 +395,8 @@ public final class FocusController {
             }
         }
         ClearBlocks.keep(station, flightFromStation, dt);
-        if ((phase == Phase.FOCUSED || phase == Phase.ENTERING) && !(minecraft.screen instanceof FocusScreen)
-                && !com.pockyl.diegesis.impl.client.ClientRegistry.isChildScreen(minecraft.screen)) {
+        if ((phase == Phase.FOCUSED || phase == Phase.ENTERING) && !(minecraft.gui.screen() instanceof FocusScreen)
+                && !com.pockyl.diegesis.impl.client.ClientRegistry.isChildScreen(minecraft.gui.screen())) {
             // Another screen replaced ours (chat, inventory, death): leave the station.
             exit(true);
         }
@@ -625,6 +625,13 @@ public final class FocusController {
         player.setYRot((float) Math.toDegrees(Math.atan2(-dir.x, dir.z)));
         player.setXRot((float) -Math.toDegrees(Math.atan2(dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z))));
         player.yHeadRot = player.getYRot();
+    }
+
+    /** Hides or shows the HUD as F1 does (Minecraft 26.x keeps the flag in its HUD, which only toggles it). */
+    private static void setHudHidden(Minecraft minecraft, boolean hidden) {
+        if (minecraft.gui.hud.isHidden() != hidden) {
+            minecraft.gui.hud.toggle();
+        }
     }
 
     public record CameraPose(Vec3 position, float yaw, float pitch) {

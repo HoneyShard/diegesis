@@ -1,8 +1,8 @@
 package com.pockyl.diegesis.impl.client.render;
 
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
+import com.pockyl.diegesis.api.client.SceneBuffers;
+import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 
 /**
@@ -17,7 +17,7 @@ public final class KeptTypes {
     }
 
     /** Makes {@code buffers} draw {@code type}, which a caller asked for and gets drawn as something else. Call it first. */
-    public static void keep(MultiBufferSource buffers, RenderType type) {
+    public static void keep(SceneBuffers buffers, RenderType type) {
         VertexConsumer consumer = buffers.getBuffer(type);
         for (int i = 0; i < 4; i++) {
             consumer.addVertex(0.0F, 0.0F, 0.0F, 0, 0.0F, 0.0F, OverlayTexture.NO_OVERLAY, 0, 0.0F, 1.0F, 0.0F);

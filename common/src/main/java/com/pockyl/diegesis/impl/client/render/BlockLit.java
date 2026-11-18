@@ -1,24 +1,25 @@
 package com.pockyl.diegesis.impl.client.render;
 
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.QuadInstance;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.LevelRenderer;
-import net.minecraft.client.renderer.block.model.BakedQuad;
-import net.minecraft.client.renderer.block.model.ItemOverrides;
-import net.minecraft.client.renderer.block.model.ItemTransforms;
+import net.minecraft.client.renderer.block.ModelBlockRenderer;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModelPart;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.client.resources.model.BakedModel;
+import net.minecraft.client.resources.model.geometry.BakedQuad;
+import net.minecraft.client.resources.model.sprite.Material;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.state.BlockState;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
+import org.joml.Vector3fc;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -36,11 +37,12 @@ import java.util.WeakHashMap;
  * corner shadows: each face takes the shade of the way it faces and the light in front of it.
  */
 final class BlockLit {
-    private static final int STRIDE = DefaultVertexFormat.BLOCK.getVertexSize() / 4;
-    private static final int NORMAL = 7;
     private static final float SQUARE = 0.9999F;
     /** The model turned by a quarter, a half and three quarters, made when first needed; dropped with the models. */
-    private static final Map<BakedModel, BakedModel[]> TURNED = new WeakHashMap<>();
+    private static final Map<BlockStateModel, BlockStateModel[]> TURNED = new WeakHashMap<>();
+    /** The chunks' block tesselator, kept for the option it was made with (smooth lighting). */
+    private static ModelBlockRenderer tesselator;
+    private static boolean tesselatorSmooth;
 
     private BlockLit() {
     }
@@ -51,7 +53,7 @@ final class BlockLit {
      *
      * @param toWorld the pose's turn into the world: the level's view turned back
      */
-    static void draw(BakedModel model, BlockState state, BlockPos pos, PoseStack poseStack, VertexConsumer consumer, Matrix4f toWorld) {
+    static void draw(BlockStateModel model, BlockState state, BlockPos pos, PoseStack poseStack, VertexConsumer consumer, Matrix4f toWorld) {
         Minecraft minecraft = Minecraft.getInstance();
         ClientLevel level = minecraft.level;
         if (level == null) {
@@ -71,23 +73,45 @@ final class BlockLit {
             poseStack.last().pose().rotateY(-quarters * Mth.HALF_PI);
             poseStack.last().normal().rotateY(-quarters * Mth.HALF_PI);
             poseStack.translate(-0.5F, 0.0F, -0.5F);
-            minecraft.getBlockRenderer().getModelRenderer().tesselateBlock(level, turned(model, quarters), state, pos, poseStack, consumer,
-                    false, RandomSource.create(), 42L, OverlayTexture.NO_OVERLAY);
+            PoseStack.Pose pose = poseStack.last();
+            tesselator(minecraft).tesselateBlock((offsetX, offsetY, offsetZ, quad, instance) -> {
+                instance.setOverlayCoords(OverlayTexture.NO_OVERLAY);
+                PoseStack.Pose at = pose.copy();
+                at.pose().translate(offsetX, offsetY, offsetZ);
+                consumer.putBakedQuad(at, quad, instance);
+            }, 0.0F, 0.0F, 0.0F, level, pos, state, turned(model, quarters), 42L);
             poseStack.popPose();
             return;
         }
-        RandomSource random = RandomSource.create();
-        for (Direction side : SIDES) {
-            random.setSeed(42L);
-            for (BakedQuad quad : model.getQuads(state, side, random)) {
-                Vector3f normal = world.transformDirection(new Vector3f(quad.getDirection().step())).normalize();
-                float shade = quad.isShade() ? diffuse(normal) : 1.0F;
-                // The light of the block the face looks into, or of the station's own where that one is solid.
-                BlockPos lit = pos.relative(Direction.getNearest(normal.x, normal.y, normal.z));
-                int light = LevelRenderer.getLightColor(level, level.getBlockState(lit).isSolidRender(level, lit) ? pos : lit);
-                consumer.putBulkData(poseStack.last(), quad, shade, shade, shade, 1.0F, light, OverlayTexture.NO_OVERLAY);
+        QuadInstance instance = new QuadInstance();
+        instance.setOverlayCoords(OverlayTexture.NO_OVERLAY);
+        for (BlockStateModelPart part : SceneDraw.parts(model)) {
+            for (Direction side : SIDES) {
+                for (BakedQuad quad : part.getQuads(side)) {
+                    Vector3f normal = world.transformDirection(new Vector3f(quad.direction().getUnitVec3f())).normalize();
+                    // A face that is not shaded by the way it faces (shade: false) is shaded as one facing up.
+                    Direction shadeOverride = quad.materialInfo().shadeDirectionOverride();
+                    float shade = diffuse(shadeOverride == null ? normal
+                            : world.transformDirection(new Vector3f(shadeOverride.getUnitVec3f())).normalize());
+                    // The light of the block the face looks into, or of the station's own where that one is solid.
+                    BlockPos lit = pos.relative(Direction.getApproximateNearest(normal.x, normal.y, normal.z));
+                    instance.setLightCoords(LightCoordsUtil.getLightCoords(level, level.getBlockState(lit).isSolidRender() ? pos : lit));
+                    int grey = Math.round(shade * 255.0F);
+                    instance.setColor(0xFF000000 | grey << 16 | grey << 8 | grey);
+                    consumer.putBakedQuad(poseStack.last(), quad, instance);
+                }
             }
         }
+    }
+
+    /** The chunks' tesselator: smooth lighting's corner shadows as the options have them, every face drawn. */
+    private static ModelBlockRenderer tesselator(Minecraft minecraft) {
+        boolean smooth = minecraft.options.ambientOcclusion().get();
+        if (tesselator == null || tesselatorSmooth != smooth) {
+            tesselator = new ModelBlockRenderer(smooth, false, minecraft.getBlockColors());
+            tesselatorSmooth = smooth;
+        }
+        return tesselator;
     }
 
     private static final Direction[] SIDES = {Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST,
@@ -99,11 +123,11 @@ final class BlockLit {
         return Math.min(1.0F, normal.x * normal.x * 0.6F + up + normal.z * normal.z * 0.8F);
     }
 
-    private static BakedModel turned(BakedModel model, int quarters) {
+    private static BlockStateModel turned(BlockStateModel model, int quarters) {
         if (quarters == 0) {
             return model;
         }
-        BakedModel[] turns = TURNED.computeIfAbsent(model, key -> new BakedModel[4]);
+        BlockStateModel[] turns = TURNED.computeIfAbsent(model, key -> new BlockStateModel[4]);
         if (turns[quarters] == null) {
             turns[quarters] = new Turned(model, quarters);
         }
@@ -111,26 +135,48 @@ final class BlockLit {
     }
 
     /** A model turned by quarters about the up through the middle of its block, its quads' sides with it. */
-    private static final class Turned implements BakedModel {
-        private final BakedModel model;
+    private record Turned(BlockStateModel model, int quarters) implements BlockStateModel {
+        @Override
+        public void collectParts(RandomSource random, List<BlockStateModelPart> output) {
+            List<BlockStateModelPart> parts = new ArrayList<>();
+            model.collectParts(random, parts);
+            for (BlockStateModelPart part : parts) {
+                output.add(new TurnedPart(part, quarters));
+            }
+        }
+
+        @Override
+        public Material.Baked particleMaterial() {
+            return model.particleMaterial();
+        }
+
+        @Override
+        public int materialFlags() {
+            return model.materialFlags();
+        }
+    }
+
+    /** A model part turned by quarters, each side's quads turned once and kept. */
+    private static final class TurnedPart implements BlockStateModelPart {
+        private final BlockStateModelPart part;
         private final int quarters;
         private final Map<Direction, List<BakedQuad>> sides = new EnumMap<>(Direction.class);
         private List<BakedQuad> unsided;
 
-        private Turned(BakedModel model, int quarters) {
-            this.model = model;
+        private TurnedPart(BlockStateModelPart part, int quarters) {
+            this.part = part;
             this.quarters = quarters;
         }
 
         @Override
-        public List<BakedQuad> getQuads(BlockState state, Direction side, RandomSource random) {
+        public List<BakedQuad> getQuads(Direction side) {
             if (side == null) {
                 if (unsided == null) {
-                    unsided = turn(model.getQuads(state, null, random));
+                    unsided = turn(part.getQuads(null));
                 }
                 return unsided;
             }
-            return sides.computeIfAbsent(side, key -> turn(model.getQuads(state, turnBack(key), random)));
+            return sides.computeIfAbsent(side, key -> turn(part.getQuads(turnBack(key))));
         }
 
         private Direction turnBack(Direction side) {
@@ -146,60 +192,36 @@ final class BlockLit {
             float cos = Mth.cos(quarters * Mth.HALF_PI);
             float sin = Mth.sin(quarters * Mth.HALF_PI);
             for (BakedQuad quad : quads) {
-                int[] data = quad.getVertices().clone();
-                for (int vertex = 0; vertex < data.length / STRIDE; vertex++) {
-                    int at = vertex * STRIDE;
-                    float x = Float.intBitsToFloat(data[at]) - 0.5F;
-                    float z = Float.intBitsToFloat(data[at + 2]) - 0.5F;
-                    data[at] = Float.floatToRawIntBits(Math.round((cos * x + sin * z) * 1.0e5F) / 1.0e5F + 0.5F);
-                    data[at + 2] = Float.floatToRawIntBits(Math.round((-sin * x + cos * z) * 1.0e5F) / 1.0e5F + 0.5F);
-                    int normal = data[at + NORMAL];
-                    float nx = (byte) normal;
-                    float nz = (byte) (normal >> 16);
-                    int tx = Math.round(cos * nx + sin * nz);
-                    int tz = Math.round(-sin * nx + cos * nz);
-                    data[at + NORMAL] = normal & 0xFF00FF00 | tx & 0xFF | (tz & 0xFF) << 16;
+                Vector3fc[] corners = new Vector3fc[BakedQuad.VERTEX_COUNT];
+                for (int vertex = 0; vertex < corners.length; vertex++) {
+                    Vector3fc position = quad.position(vertex);
+                    float x = position.x() - 0.5F;
+                    float z = position.z() - 0.5F;
+                    corners[vertex] = new Vector3f(Math.round((cos * x + sin * z) * 1.0e5F) / 1.0e5F + 0.5F, position.y(),
+                            Math.round((-sin * x + cos * z) * 1.0e5F) / 1.0e5F + 0.5F);
                 }
-                Vector3f facing = new Vector3f(quad.getDirection().step());
-                Direction side = Direction.getNearest(cos * facing.x + sin * facing.z, facing.y, -sin * facing.x + cos * facing.z);
-                turned.add(new BakedQuad(data, quad.getTintIndex(), side, quad.getSprite(), quad.isShade()));
+                Vector3fc facing = quad.direction().getUnitVec3f();
+                Direction side = Direction.getApproximateNearest(cos * facing.x() + sin * facing.z(), facing.y(),
+                        -sin * facing.x() + cos * facing.z());
+                turned.add(new BakedQuad(corners[0], corners[1], corners[2], corners[3], quad.packedUV0(), quad.packedUV1(),
+                        quad.packedUV2(), quad.packedUV3(), side, quad.materialInfo()));
             }
             return turned;
         }
 
         @Override
         public boolean useAmbientOcclusion() {
-            return model.useAmbientOcclusion();
+            return part.useAmbientOcclusion();
         }
 
         @Override
-        public boolean isGui3d() {
-            return model.isGui3d();
+        public Material.Baked particleMaterial() {
+            return part.particleMaterial();
         }
 
         @Override
-        public boolean usesBlockLight() {
-            return model.usesBlockLight();
-        }
-
-        @Override
-        public boolean isCustomRenderer() {
-            return false;
-        }
-
-        @Override
-        public TextureAtlasSprite getParticleIcon() {
-            return model.getParticleIcon();
-        }
-
-        @Override
-        public ItemTransforms getTransforms() {
-            return model.getTransforms();
-        }
-
-        @Override
-        public ItemOverrides getOverrides() {
-            return model.getOverrides();
+        public int materialFlags() {
+            return part.materialFlags();
         }
     }
 }

@@ -1,7 +1,7 @@
 package com.pockyl.diegesis.platform;
 
-import net.minecraft.client.resources.model.BakedModel;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
+import net.minecraft.resources.Identifier;
 
 import com.pockyl.diegesis.impl.network.Packets;
 
@@ -15,5 +15,5 @@ public interface ClientPlatform {
     void sendToServer(Packets.ClientPacket packet);
 
     /** A model registered as an extra model (see {@code ModelRegistry}); the missing model when it is unknown. */
-    BakedModel getModel(ResourceLocation id);
+    BlockStateModel getModel(Identifier id);
 }

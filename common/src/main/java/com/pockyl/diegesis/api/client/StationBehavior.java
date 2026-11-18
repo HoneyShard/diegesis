@@ -1,7 +1,7 @@
 package com.pockyl.diegesis.api.client;
 
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 
 import com.pockyl.diegesis.api.event.SceneEvent;
@@ -84,9 +84,10 @@ public interface StationBehavior {
      * drop keys). Return true to take it: the library then does nothing with it. Repeats of a held key come too. Take only what
      * the station needs at that moment (typing into a field it shows), or the player loses the library's keys.
      *
-     * @param keyCode   GLFW key code
-     * @param scanCode  the platform's scan code
-     * @param modifiers GLFW modifier bits (shift, control, alt)
+     * @param keyCode   the key, as {@code InputConstants} numbers it ({@code InputConstants.KEY_*}; since Minecraft 26.x an SDL
+     *                  scancode, no longer a GLFW key code)
+     * @param scanCode  the key as the keyboard layout names it (SDL keycode)
+     * @param modifiers the modifier bits (shift, control, alt)
      */
     default boolean onKey(StationView view, int keyCode, int scanCode, int modifiers) {
         return false;
@@ -109,7 +110,7 @@ public interface StationBehavior {
     }
 
     /** The station logic played an effect ({@code StationContext.effect}); runs after the effect itself. */
-    default void onEffect(StationView view, ResourceLocation effect, String node, CompoundTag data) {
+    default void onEffect(StationView view, Identifier effect, String node, CompoundTag data) {
     }
 
     /** A menu-backed station's vanilla menu arrived from the server: {@link StationView#menu()} is there from now on. */

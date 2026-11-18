@@ -2,7 +2,10 @@ package com.pockyl.diegesis.impl.client.mesh;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.client.model.geom.builders.UVPair;
+import net.minecraft.client.renderer.Sheets;
+import net.minecraft.client.renderer.chunk.ChunkSectionLayer;
+import net.minecraft.client.resources.model.geometry.BakedQuad;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.Direction;
@@ -110,32 +113,28 @@ public final class Mesh {
      */
     public List<BakedQuad> quads(TextureAtlasSprite sprite) {
         List<BakedQuad> quads = new ArrayList<>(faces());
+        // Drawn as an item of the block atlas, cut out, untinted, shaded by the way each face looks.
+        BakedQuad.MaterialInfo material = new BakedQuad.MaterialInfo(sprite, ChunkSectionLayer.CUTOUT, Sheets.cutoutBlockItemSheet(),
+                Sheets.cutoutBlockItemGlintSheet(), Sheets.cutoutBlockItemGlintSpecialSheet(), -1, null, 0);
         for (int face = 0; face < vertices.length; face += 4 * STRIDE) {
-            int[] data = new int[32];
+            Vector3f[] corners = new Vector3f[4];
+            long[] uvs = new long[4];
             float nx = 0.0F;
             float ny = 0.0F;
             float nz = 0.0F;
             for (int corner = 0; corner < 4; corner++) {
                 int i = face + corner * STRIDE;
-                int at = corner * 8;
-                data[at] = Float.floatToRawIntBits(vertices[i] / 16.0F + 0.5F);
-                data[at + 1] = Float.floatToRawIntBits(vertices[i + 1] / 16.0F);
-                data[at + 2] = Float.floatToRawIntBits(vertices[i + 2] / 16.0F + 0.5F);
-                data[at + 3] = -1;
-                data[at + 4] = Float.floatToRawIntBits(sprite.getU0() + vertices[i + 3] * (sprite.getU1() - sprite.getU0()));
-                data[at + 5] = Float.floatToRawIntBits(sprite.getV0() + vertices[i + 4] * (sprite.getV1() - sprite.getV0()));
-                data[at + 7] = packNormal(vertices[i + 5], vertices[i + 6], vertices[i + 7]);
+                corners[corner] = new Vector3f(vertices[i] / 16.0F + 0.5F, vertices[i + 1] / 16.0F, vertices[i + 2] / 16.0F + 0.5F);
+                uvs[corner] = UVPair.pack(sprite.getU0() + vertices[i + 3] * (sprite.getU1() - sprite.getU0()),
+                        sprite.getV0() + vertices[i + 4] * (sprite.getV1() - sprite.getV0()));
                 nx += vertices[i + 5];
                 ny += vertices[i + 6];
                 nz += vertices[i + 7];
             }
-            quads.add(new BakedQuad(data, -1, Direction.getNearest(nx, ny, nz), sprite, true));
+            quads.add(new BakedQuad(corners[0], corners[1], corners[2], corners[3], uvs[0], uvs[1], uvs[2], uvs[3],
+                    Direction.getApproximateNearest(nx, ny, nz), material));
         }
         return List.copyOf(quads);
-    }
-
-    private static int packNormal(float x, float y, float z) {
-        return (Math.round(x * 127.0F) & 0xFF) | (Math.round(y * 127.0F) & 0xFF) << 8 | (Math.round(z * 127.0F) & 0xFF) << 16;
     }
 
     /** Draws the model with {@code sprite} as its texture, in the same way baked quads reach a consumer. */

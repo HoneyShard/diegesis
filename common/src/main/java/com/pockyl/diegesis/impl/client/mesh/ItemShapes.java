@@ -1,32 +1,30 @@
 package com.pockyl.diegesis.impl.client.mesh;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.block.model.BakedQuad;
-import net.minecraft.client.renderer.block.model.ItemOverrides;
-import net.minecraft.client.renderer.block.model.ItemTransforms;
+import net.minecraft.client.renderer.item.ItemStackRenderState;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.client.resources.model.BakedModel;
-import net.minecraft.core.Direction;
+import net.minecraft.client.resources.model.geometry.BakedQuad;
+import net.minecraft.client.resources.model.geometry.ItemQuads;
 import net.minecraft.core.component.DataComponentPatch;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.RandomSource;
-import net.minecraft.world.inventory.InventoryMenu;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.state.BlockState;
+import org.joml.Vector3fc;
 
 import com.pockyl.diegesis.api.client.MeshShape;
+import com.pockyl.diegesis.mixin.client.ItemStackRenderStateAccessor;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 /**
  * Items whose look is a {@link MeshShape} made from their data. The item keeps the model of its JSON file for its display
- * transforms; {@code ItemRendererMixin} swaps it where the game asks for the model of a stack, so inventories, frames, hands and
- * shelves all show the shape. Baked shapes are kept per item data, until the textures are stitched anew.
+ * transforms; {@code ItemModelResolverMixin} swaps its quads wherever the game builds the look of a stack, so inventories, frames,
+ * hands and shelves all show the shape. Baked shapes are kept per item data, until the textures are stitched anew.
  */
 public final class ItemShapes {
     private static final int KEPT_SHAPES = 256;
@@ -35,14 +33,26 @@ public final class ItemShapes {
     private ItemShapes() {
     }
 
-    public static void register(Item item, Function<ItemStack, MeshShape> shape, ResourceLocation texture) {
+    public static void register(Item item, Function<ItemStack, MeshShape> shape, Identifier texture) {
         ITEMS.put(item, new Entry(shape, texture));
     }
 
-    /** The model to draw {@code stack} with: its shape, or {@code model} for every other item. */
-    public static BakedModel resolve(ItemStack stack, BakedModel model) {
+    /**
+     * Gives the layers of {@code look} from {@code firstLayer} on, the ones the item's model just added, the shape of {@code stack}
+     * when its item has one.
+     */
+    public static void apply(ItemStack stack, ItemStackRenderStateAccessor look, int firstLayer) {
         Entry entry = ITEMS.isEmpty() ? null : ITEMS.get(stack.getItem());
-        return entry == null ? model : entry.model(stack, model);
+        if (entry == null) {
+            return;
+        }
+        Shape shape = entry.shape(stack);
+        ItemStackRenderState.LayerRenderState[] layers = look.diegesis$layers();
+        for (int i = firstLayer; i < look.diegesis$layerCount(); i++) {
+            layers[i].setQuads(shape.quads());
+            layers[i].setExtents(shape::extents);
+            layers[i].setUsesBlockLight(true);
+        }
     }
 
     /** Models are new after a resource reload, and the sprites with them. */
@@ -52,79 +62,39 @@ public final class ItemShapes {
 
     private static final class Entry {
         private final Function<ItemStack, MeshShape> shape;
-        private final ResourceLocation texture;
-        private final Map<DataComponentPatch, BakedModel> baked = new LinkedHashMap<>(16, 0.75F, true) {
+        private final Identifier texture;
+        private final Map<DataComponentPatch, Shape> baked = new LinkedHashMap<>(16, 0.75F, true) {
             @Override
-            protected boolean removeEldestEntry(Map.Entry<DataComponentPatch, BakedModel> eldest) {
+            protected boolean removeEldestEntry(Map.Entry<DataComponentPatch, Shape> eldest) {
                 return size() > KEPT_SHAPES;
             }
         };
 
-        Entry(Function<ItemStack, MeshShape> shape, ResourceLocation texture) {
+        Entry(Function<ItemStack, MeshShape> shape, Identifier texture) {
             this.shape = shape;
             this.texture = texture;
         }
 
-        BakedModel model(ItemStack stack, BakedModel original) {
+        Shape shape(ItemStack stack) {
             DataComponentPatch key = stack.getComponentsPatch();
-            BakedModel found = baked.get(key);
+            Shape found = baked.get(key);
             if (found == null) {
-                TextureAtlasSprite sprite = Minecraft.getInstance().getTextureAtlas(InventoryMenu.BLOCK_ATLAS).apply(texture);
-                found = new Shaped(original, shape.apply(stack).mesh().quads(sprite));
+                TextureAtlasSprite sprite = com.pockyl.diegesis.impl.client.render.SceneDraw.blockSprite(texture);
+                List<BakedQuad> quads = shape.apply(stack).mesh().quads(sprite);
+                Set<Vector3fc> corners = new HashSet<>();
+                for (BakedQuad quad : quads) {
+                    for (int vertex = 0; vertex < BakedQuad.VERTEX_COUNT; vertex++) {
+                        corners.add(quad.position(vertex));
+                    }
+                }
+                found = new Shape(ItemQuads.split(quads), corners.toArray(Vector3fc[]::new));
                 baked.put(key, found);
             }
             return found;
         }
     }
 
-    /** Fixed quads with the display transforms of the item's JSON model. */
-    private static final class Shaped implements BakedModel {
-        private final BakedModel original;
-        private final List<BakedQuad> quads;
-
-        Shaped(BakedModel original, List<BakedQuad> quads) {
-            this.original = original;
-            this.quads = quads;
-        }
-
-        @Override
-        public List<BakedQuad> getQuads(BlockState state, Direction side, RandomSource random) {
-            return side == null ? quads : List.of();
-        }
-
-        @Override
-        public boolean useAmbientOcclusion() {
-            return false;
-        }
-
-        @Override
-        public boolean isGui3d() {
-            return true;
-        }
-
-        @Override
-        public boolean usesBlockLight() {
-            return true;
-        }
-
-        @Override
-        public boolean isCustomRenderer() {
-            return false;
-        }
-
-        @Override
-        public TextureAtlasSprite getParticleIcon() {
-            return original.getParticleIcon();
-        }
-
-        @Override
-        public ItemTransforms getTransforms() {
-            return original.getTransforms();
-        }
-
-        @Override
-        public ItemOverrides getOverrides() {
-            return ItemOverrides.EMPTY;
-        }
+    /** A shape baked for one item's data: its quads, and their corners (what the game measures an item by). */
+    private record Shape(ItemQuads quads, Vector3fc[] extents) {
     }
 }
