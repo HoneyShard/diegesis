@@ -601,16 +601,17 @@ public final class SceneRenderer {
     }
 
     /**
-     * The world block a model lit as a block stands in: the one holding the middle of its own first block (its pixels 0..16), so
-     * that a multiblock's scene drawn as one model a block takes each its own block's light and corner shadows. A model in the
-     * station's block, as most are, is lit by that block.
+     * The world block a model lit as a block stands in: the one holding the point it stands on (its anchor, a hair above), so that
+     * a multiblock's scene drawn a model a block takes each its own block's light and corner shadows, and a lid set beside the
+     * station the light where it stands. A model standing in the station's block, as most do, is lit by that block.
      */
-    private static BlockPos standsIn(PoseStack poseStack) {
+    private static BlockPos standsIn(PoseStack poseStack, Vector3fc anchor) {
         if (drawnCamera == null) {
             return drawnPos;
         }
-        Vector3f middle = new Matrix4f(TO_WORLD).mul(poseStack.last().pose()).transformPosition(new Vector3f(0.5F, 0.5F, 0.5F));
-        return BlockPos.containing(drawnCamera.x + middle.x, drawnCamera.y + middle.y, drawnCamera.z + middle.z);
+        Vector3f point = new Matrix4f(TO_WORLD).mul(poseStack.last().pose())
+                .transformPosition(new Vector3f(anchor.x() / 16.0F, anchor.y() / 16.0F + 0.01F, anchor.z() / 16.0F));
+        return BlockPos.containing(drawnCamera.x + point.x, drawnCamera.y + point.y, drawnCamera.z + point.z);
     }
 
     private static boolean isBlockSheet(RenderType type) {
@@ -665,7 +666,7 @@ public final class SceneRenderer {
                 // The scene's own lights (a lantern on a shelf) brighten the walls and boards around them.
                 lit = new SceneLitConsumer(lit, TO_STATION, NORMAL_TO_STATION, drawnLights, drawnSurfaces);
             }
-            BlockLit.draw(model, state != null ? state : level.getBlockState(drawnPos), standsIn(poseStack), poseStack,
+            BlockLit.draw(model, state != null ? state : level.getBlockState(drawnPos), standsIn(poseStack, anchor), poseStack,
                     tint != Visual.WHITE ? new TintedConsumer(lit, tint) : lit, TO_WORLD);
             poseStack.popPose();
             return;

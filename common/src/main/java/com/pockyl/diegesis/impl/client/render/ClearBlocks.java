@@ -149,12 +149,15 @@ public final class ClearBlocks {
     private static void shot(ClientLevel level, ClientStation station, Vector3fc position, Vector3fc target, CollisionContext context,
             LongOpenHashSet found) {
         Vec3 camera = station.toWorld(position.x(), position.y(), position.z());
-        BlockPos own = station.pos();
+        // The station's own blocks are never in its way: its block, and every other block of a multiblock its scene stands in for.
+        LongOpenHashSet own = new LongOpenHashSet();
+        own.add(station.pos().asLong());
+        station.type().hiddenBlocks(level, station.pos()).forEach(block -> own.add(block.asLong()));
         AABB room = new AABB(camera, camera).inflate(ROOM);
         VoxelShape roomShape = Shapes.create(room);
         for (BlockPos pos : BlockPos.betweenClosed(BlockPos.containing(room.minX, room.minY, room.minZ),
                 BlockPos.containing(room.maxX, room.maxY, room.maxZ))) {
-            if (!pos.equals(own)) {
+            if (!own.contains(pos.asLong())) {
                 VoxelShape shape = level.getBlockState(pos).getVisualShape(level, pos, context);
                 if (!shape.isEmpty() && Shapes.joinIsNotEmpty(shape.move(pos.getX(), pos.getY(), pos.getZ()), roomShape, BooleanOp.AND)) {
                     found.add(pos.asLong());
@@ -187,9 +190,9 @@ public final class ClearBlocks {
     }
 
     /** Every block whose visual shape the line from {@code from} to {@code to} passes through. */
-    private static void sight(ClientLevel level, BlockPos own, Vec3 from, Vec3 to, CollisionContext context, LongOpenHashSet found) {
+    private static void sight(ClientLevel level, LongOpenHashSet own, Vec3 from, Vec3 to, CollisionContext context, LongOpenHashSet found) {
         BlockGetter.traverseBlocks(from, to, context, (ctx, pos) -> {
-            if (!pos.equals(own)) {
+            if (!own.contains(pos.asLong())) {
                 VoxelShape shape = level.getBlockState(pos).getVisualShape(level, pos, ctx);
                 if (!shape.isEmpty() && shape.clip(from, to, pos) != null) {
                     found.add(pos.asLong());
