@@ -1,10 +1,11 @@
 package com.pockyl.diegesis.fabric;
 
+import net.fabricmc.fabric.api.client.model.loading.v1.ExtraModelKey;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.resources.model.BakedModel;
-import net.minecraft.client.resources.model.ModelManager;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
+import net.minecraft.resources.Identifier;
 
+import com.pockyl.diegesis.impl.client.render.SceneDraw;
 import com.pockyl.diegesis.impl.network.Packets;
 import com.pockyl.diegesis.platform.ClientPlatform;
 
@@ -22,9 +23,9 @@ public final class FabricClientPlatform implements ClientPlatform {
     }
 
     @Override
-    public BakedModel getModel(ResourceLocation id) {
-        ModelManager manager = Minecraft.getInstance().getModelManager();
-        BakedModel model = manager.getModel(id);
-        return model != null ? model : manager.getMissingModel();
+    public BlockStateModel getModel(Identifier id) {
+        ExtraModelKey<BlockStateModel> key = DiegesisFabricClient.sceneModel(id);
+        BlockStateModel model = key != null ? Minecraft.getInstance().getModelManager().getModel(key) : null;
+        return model != null ? model : SceneDraw.missingModel();
     }
 }

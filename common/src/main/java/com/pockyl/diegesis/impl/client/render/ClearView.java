@@ -3,9 +3,9 @@ package com.pockyl.diegesis.impl.client.render;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Camera;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
-import net.minecraft.resources.ResourceLocation;
+import com.pockyl.diegesis.api.client.SceneBuffers;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -29,6 +29,10 @@ import java.util.regex.Pattern;
  * outwards. Entities are drawn before the scene and, faded, write no depth: the scene comes out whole, wherever they stand.
  * Everything here is in view space (the camera at the origin); entities and particles arrive relative to the camera but not yet
  * turned to it (the level's view rotation is in the model-view matrix), so their vertices are turned here.
+ *
+ * <p>Minecraft 26.3: not hooked in yet. Entities and particles are drawn from render states the game extracts and submits, and the
+ * hooks this was fed by (an entity's buffers, a particle's own drawing) are gone: until they are fed from the submits, entities and
+ * particles in the camera's way do not fade. The blocks in its way still go ({@link ClearBlocks}).
  */
 public final class ClearView {
     /** Width of the cone at the camera, in blocks. */
@@ -83,7 +87,7 @@ public final class ClearView {
             return;
         }
         ClearViewOptions options = station.scene().definition().clearView();
-        Vec3 eye = camera.getPosition();
+        Vec3 eye = camera.position();
         Vector3fc looked = focus.baseTarget();
         Vec3 target = station.toWorld(looked.x(), looked.y(), looked.z());
         VIEW.set(view);
@@ -153,7 +157,7 @@ public final class ClearView {
     }
 
     /** What the entity noted last draws into: the game's buffers, or fading ones while it may stand in the way. */
-    public static MultiBufferSource buffers(MultiBufferSource buffers) {
+    public static SceneBuffers buffers(SceneBuffers buffers) {
         if (strength <= 0.0F || !entities || STRICT_RENDERER || current == null || ShaderShadows.drawing()
                 || !mayBeInside(current.getBoundingBox())) {
             return buffers;
@@ -198,12 +202,12 @@ public final class ClearView {
 
     /** The translucent, depth-less twin of a textured entity type; empty for what has no texture to show (lines, text, glints). */
     private static Optional<RenderType> ghostOf(RenderType type) {
-        if (type.format() != DefaultVertexFormat.NEW_ENTITY) {
+        if (type.format() != DefaultVertexFormat.ENTITY) {
             return Optional.empty();
         }
         // The state's texture is out of reach of code that is no render state, but every type prints it.
         Matcher matcher = TEXTURE.matcher(type.toString());
-        return matcher.find() ? Optional.of(DiegesisRenderTypes.ghostEntity(ResourceLocation.parse(matcher.group(1)))) : Optional.empty();
+        return matcher.find() ? Optional.of(DiegesisRenderTypes.ghostEntity(Identifier.parse(matcher.group(1)))) : Optional.empty();
     }
 
     /**
@@ -267,6 +271,11 @@ public final class ClearView {
         }
 
         @Override
+        public VertexConsumer setColor(int argb) {
+            return setColor(argb >> 16 & 0xFF, argb >> 8 & 0xFF, argb & 0xFF, argb >>> 24);
+        }
+
+        @Override
         public VertexConsumer setUv(float u, float v) {
             delegate.setUv(u, v);
             return this;
@@ -281,6 +290,18 @@ public final class ClearView {
         @Override
         public VertexConsumer setUv2(int u, int v) {
             delegate.setUv2(u, v);
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setLineWidth(float width) {
+            delegate.setLineWidth(width);
+            return this;
+        }
+
+        @Override
+        public VertexConsumer setUv3(float u, float v) {
+            delegate.setUv3(u, v);
             return this;
         }
 

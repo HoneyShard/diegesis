@@ -1,13 +1,13 @@
 package com.pockyl.diegesis.impl.client.debug;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.renderer.LevelRenderer;
-import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.util.LightCoordsUtil;
+import com.pockyl.diegesis.api.client.SceneBuffers;
+import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.phys.Vec3;
@@ -52,7 +52,7 @@ public final class DebugView {
     }
 
     public static boolean isOn() {
-        return forced || Minecraft.getInstance().getEntityRenderDispatcher().shouldRenderHitBoxes();
+        return forced || Minecraft.getInstance().debugEntries.isCurrentlyEnabled(net.minecraft.client.gui.components.debug.DebugScreenEntries.ENTITY_HITBOXES);
     }
 
     public static void set(boolean on) {
@@ -64,7 +64,7 @@ public final class DebugView {
         forced = !forced;
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player != null) {
-            minecraft.player.displayClientMessage(Component.translatable(forced ? "diegesis.debug.on" : "diegesis.debug.off"), true);
+            minecraft.player.sendOverlayMessage(Component.translatable(forced ? "diegesis.debug.on" : "diegesis.debug.off"));
         }
     }
 
@@ -73,7 +73,7 @@ public final class DebugView {
      *
      * @param world the station-to-world matrix, for the labels
      */
-    public static void render(ClientStation station, PoseStack poseStack, MultiBufferSource buffers, Camera camera, PoseStack levelPose,
+    public static void render(ClientStation station, PoseStack poseStack, SceneBuffers buffers, Camera camera, PoseStack levelPose,
             Vec3 cameraPos) {
         SceneInstance scene = station.scene();
         // Lines first, labels after: they share the buffer source, and switching render types mid-box breaks a vertex.
@@ -131,24 +131,44 @@ public final class DebugView {
         return node.collider().isPresent() ? CLICKABLE : DECOR;
     }
 
-    private static void box(PoseStack poseStack, MultiBufferSource buffers, Vector3fc from, Vector3fc to, float[] color) {
-        LevelRenderer.renderLineBox(poseStack, buffers.getBuffer(RenderType.lines()), from.x(), from.y(), from.z(), to.x(), to.y(), to.z(), color[0], color[1], color[2],
-                1.0F);
+    /** The twelve edges of a box, in lines (the game has no helper for it since Minecraft 26.x). */
+    private static void box(PoseStack poseStack, SceneBuffers buffers, Vector3fc from, Vector3fc to, float[] color) {
+        VertexConsumer lines = buffers.getBuffer(net.minecraft.client.renderer.rendertype.RenderTypes.lines());
+        PoseStack.Pose pose = poseStack.last();
+        float[] xs = {from.x(), to.x()};
+        float[] ys = {from.y(), to.y()};
+        float[] zs = {from.z(), to.z()};
+        for (int a = 0; a < 2; a++) {
+            for (int b = 0; b < 2; b++) {
+                edge(lines, pose, xs[0], ys[a], zs[b], xs[1], ys[a], zs[b], color);
+                edge(lines, pose, xs[a], ys[0], zs[b], xs[a], ys[1], zs[b], color);
+                edge(lines, pose, xs[a], ys[b], zs[0], xs[a], ys[b], zs[1], color);
+            }
+        }
+    }
+
+    private static void edge(VertexConsumer lines, PoseStack.Pose pose, float x0, float y0, float z0, float x1, float y1, float z1,
+            float[] color) {
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float dz = z1 - z0;
+        lines.addVertex(pose, x0, y0, z0).setColor(color[0], color[1], color[2], 1.0F).setNormal(pose, dx, dy, dz).setLineWidth(1.0F);
+        lines.addVertex(pose, x1, y1, z1).setColor(color[0], color[1], color[2], 1.0F).setNormal(pose, dx, dy, dz).setLineWidth(1.0F);
     }
 
     /** A node id facing the camera, like a name tag. */
-    private static void label(String text, Vec3 at, PoseStack levelPose, MultiBufferSource buffers, Camera camera, Vec3 cameraPos,
+    private static void label(String text, Vec3 at, PoseStack levelPose, SceneBuffers buffers, Camera camera, Vec3 cameraPos,
             float[] color) {
         Font font = Minecraft.getInstance().font;
         levelPose.pushPose();
         levelPose.translate(at.x - cameraPos.x, at.y - cameraPos.y, at.z - cameraPos.z);
-        levelPose.mulPose(camera.rotation());
+        levelPose.rotate(camera.rotation());
         float scale = LABEL_SCALE * (float) Math.max(1.0, cameraPos.distanceTo(at) * 0.5);
         levelPose.scale(-scale, -scale, scale);
         Matrix4f matrix = levelPose.last().pose();
         int rgb = (int) (color[0] * 255) << 16 | (int) (color[1] * 255) << 8 | (int) (color[2] * 255);
-        font.drawInBatch(text, -font.width(text) / 2.0F, 0.0F, 0xFF000000 | rgb, false, matrix, buffers, Font.DisplayMode.SEE_THROUGH,
-                0x80000000, LightTexture.FULL_BRIGHT);
+        com.pockyl.diegesis.impl.client.render.SceneDraw.text(buffers, text, -font.width(text) / 2.0F, 0.0F, 0xFF000000 | rgb, matrix,
+                Font.DisplayMode.SEE_THROUGH, 0x80000000, LightCoordsUtil.FULL_BRIGHT);
         levelPose.popPose();
     }
 

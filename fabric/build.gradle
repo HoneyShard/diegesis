@@ -1,19 +1,16 @@
 plugins {
     id 'multiloader-loader'
-    id 'fabric-loom'
+    id 'net.fabricmc.fabric-loom'
 }
 
+// Minecraft 26.x is unobfuscated: no mappings and no remapping, so mods are plain implementation dependencies and the jar
+// task builds the release file.
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"
-    mappings loom.layered {
-        officialMojangMappings()
-        parchment("org.parchmentmc.data:parchment-${parchment_minecraft_version}:${parchment_mappings_version}@zip")
-    }
-    modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
-    // Sable's companion API in Mojang names, as the common sources are compiled here; the jar is remapped with them, and Sable's
-    // Fabric build bundles the same API in intermediary names.
-    compileOnly "dev.ryanhcode.sable-companion:sable-companion-common-${minecraft_version}:${sable_companion_version}"
+    implementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+    // Sable's companion API, as compiled by common (see gradle.properties: no 26.3 build yet).
+    compileOnly "dev.ryanhcode.sable-companion:sable-companion-common-${sable_companion_minecraft_version}:${sable_companion_version}"
 }
 
 loom {
@@ -135,7 +132,7 @@ tasks.named('processResources', ProcessResources) {
 }
 
 publishMods {
-    file = tasks.named('remapJar').flatMap { it.archiveFile }
+    file = tasks.named('jar').flatMap { it.archiveFile }
     displayName = "${mod_name} ${mod_version}+${minecraft_version} (Fabric)"
     modLoaders.add('fabric')
 

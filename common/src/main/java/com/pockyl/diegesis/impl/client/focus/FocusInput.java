@@ -1,7 +1,9 @@
 package com.pockyl.diegesis.impl.client.focus;
 
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
@@ -418,7 +420,7 @@ public final class FocusInput {
                 && outsideBlock(station, x, y)) {
             // As outside a vanilla screen: the stack in the hand, or one of it, is thrown.
             com.pockyl.diegesis.impl.client.menu.MenuSession.get().click(station, null, button,
-                    net.minecraft.world.inventory.ClickType.PICKUP);
+                    net.minecraft.world.inventory.ContainerInput.PICKUP);
             return;
         }
         if (button == 1 && !carriedStack().isEmpty() && station.scene().definition().putAway()) {
@@ -582,7 +584,7 @@ public final class FocusInput {
      * the off hand, the drop key throws one (with Ctrl the stack), the pick key copies the stack in creative mode. True when
      * the key was such a key over a slot.
      */
-    boolean menuKey(int keyCode, int scanCode, boolean control) {
+    boolean menuKey(KeyEvent event, boolean control) {
         ClientStation station = station();
         LocalPlayer player = Minecraft.getInstance().player;
         if (station == null || player == null || station.type().authority() != Authority.MENU || gesture != null) {
@@ -596,25 +598,25 @@ public final class FocusInput {
         var options = Minecraft.getInstance().options;
         var session = com.pockyl.diegesis.impl.client.menu.MenuSession.get();
         if (carriedStack().isEmpty()) {
-            if (options.keySwapOffhand.matches(keyCode, scanCode)) {
+            if (options.keySwapOffhand.matches(event)) {
                 session.click(station, target, net.minecraft.world.entity.player.Inventory.SLOT_OFFHAND,
-                        net.minecraft.world.inventory.ClickType.SWAP);
+                        net.minecraft.world.inventory.ContainerInput.SWAP);
                 return true;
             }
             for (int i = 0; i < 9; i++) {
-                if (options.keyHotbarSlots[i].matches(keyCode, scanCode)) {
-                    session.click(station, target, i, net.minecraft.world.inventory.ClickType.SWAP);
+                if (options.keyHotbarSlots[i].matches(event)) {
+                    session.click(station, target, i, net.minecraft.world.inventory.ContainerInput.SWAP);
                     return true;
                 }
             }
         }
         if (!itemAt(station, target).isEmpty()) {
-            if (options.keyPickItem.matches(keyCode, scanCode)) {
-                session.click(station, target, 2, net.minecraft.world.inventory.ClickType.CLONE);
+            if (options.keyPickItem.matches(event)) {
+                session.click(station, target, 2, net.minecraft.world.inventory.ContainerInput.CLONE);
                 return true;
             }
-            if (options.keyDrop.matches(keyCode, scanCode)) {
-                session.click(station, target, control ? 1 : 0, net.minecraft.world.inventory.ClickType.THROW);
+            if (options.keyDrop.matches(event)) {
+                session.click(station, target, control ? 1 : 0, net.minecraft.world.inventory.ContainerInput.THROW);
                 return true;
             }
         }
@@ -627,9 +629,9 @@ public final class FocusInput {
      * over them, as a left drag does (vanilla's survival screen has nothing for it). With an empty hand at a menu station, a copy
      * of the stack in creative mode, as in vanilla screens.
      */
-    boolean menuPick(int button) {
+    boolean menuPick(MouseButtonEvent event) {
         ClientStation station = station();
-        if (station == null || gesture != null || !Minecraft.getInstance().options.keyPickItem.matchesMouse(button)) {
+        if (station == null || gesture != null || !Minecraft.getInstance().options.keyPickItem.matchesMouse(event)) {
             return false;
         }
         Target target = targetUnderCursor(station);
@@ -639,7 +641,7 @@ public final class FocusInput {
             if (there.isEmpty() || ItemStack.isSameItemSameComponents(there, carriedStack())) {
                 boolean creative = Minecraft.getInstance().player != null && Minecraft.getInstance().player.getAbilities().instabuild;
                 spreadButton = menu && creative ? CLONE_SPREAD : 0;
-                spreadMouseButton = button;
+                spreadMouseButton = FocusScreen.containerButton(event);
                 spreadTargets.clear();
                 spreadTargets.add(target);
                 return true;
@@ -648,7 +650,7 @@ public final class FocusInput {
         if (!menu || target == null || itemAt(station, target).isEmpty()) {
             return false;
         }
-        com.pockyl.diegesis.impl.client.menu.MenuSession.get().click(station, target, 2, net.minecraft.world.inventory.ClickType.CLONE);
+        com.pockyl.diegesis.impl.client.menu.MenuSession.get().click(station, target, 2, net.minecraft.world.inventory.ContainerInput.CLONE);
         return true;
     }
 
@@ -669,7 +671,7 @@ public final class FocusInput {
         if (amount < 0.0) {
             if ((there.isEmpty() || same && there.getCount() < there.getMaxStackSize())
                     && station.perform(new StationAction.Click(target, 1, ClickKind.PICKUP))) {
-                UiSounds.putDown(station.pos().getCenter());
+                UiSounds.putDown(net.minecraft.world.phys.Vec3.atCenterOf(station.pos()));
             }
             return true;
         }
@@ -694,7 +696,7 @@ public final class FocusInput {
             station.perform(new StationAction.Click(target, 0, ClickKind.PICKUP));
         }
         if (station.perform(new StationAction.Click(spare, 0, ClickKind.PICKUP))) {
-            UiSounds.pickUp(station.pos().getCenter());
+            UiSounds.pickUp(net.minecraft.world.phys.Vec3.atCenterOf(station.pos()));
         }
         return true;
     }
@@ -798,7 +800,7 @@ public final class FocusInput {
                     // Laid onto the slot's stack and the whole picked up: the hand holds both.
                     station.perform(new StationAction.Click(target, 0, ClickKind.PICKUP));
                     if (station.perform(new StationAction.Click(target, 0, ClickKind.PICKUP))) {
-                        UiSounds.pickUp(station.pos().getCenter());
+                        UiSounds.pickUp(net.minecraft.world.phys.Vec3.atCenterOf(station.pos()));
                     }
                 }
             }
@@ -813,7 +815,7 @@ public final class FocusInput {
         ItemStack there = itemAt(station, target);
         boolean takes = there.isEmpty() || ItemStack.isSameItemSameComponents(there, carried) && there.getCount() < there.getMaxStackSize();
         if (takes && station.perform(new StationAction.Click(target, 1, ClickKind.PICKUP))) {
-            UiSounds.putDown(station.pos().getCenter());
+            UiSounds.putDown(net.minecraft.world.phys.Vec3.atCenterOf(station.pos()));
         }
     }
 
@@ -823,12 +825,12 @@ public final class FocusInput {
             return;
         }
         if (station.perform(new StationAction.Click(target, 0, ClickKind.QUICK_MOVE))) {
-            UiSounds.pickUp(station.pos().getCenter());
+            UiSounds.pickUp(net.minecraft.world.phys.Vec3.atCenterOf(station.pos()));
         }
     }
 
     private static boolean hasShiftDown() {
-        return net.minecraft.client.gui.screens.Screen.hasShiftDown();
+        return Minecraft.getInstance().hasShiftDown();
     }
 
     void drag(double x, double y, int inventorySlot) {
@@ -895,7 +897,7 @@ public final class FocusInput {
         if (spreadMouseButton != 0 && spreadMouseButton != 1) {
             // The middle button. One slot is no drag: vanilla does nothing for a middle click with a stack in the hand.
             if (spreadTargets.size() > 1 && station.perform(new StationAction.Spread(spreadTargets, spreadButton))) {
-                UiSounds.putDown(station.pos().getCenter());
+                UiSounds.putDown(net.minecraft.world.phys.Vec3.atCenterOf(station.pos()));
             }
             spreadTargets.clear();
             spreadButton = -1;

@@ -1,13 +1,13 @@
 package com.pockyl.diegesis.impl.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.QuadInstance;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import net.minecraft.client.renderer.block.model.BakedQuad;
-import net.minecraft.core.Vec3i;
+import net.minecraft.client.model.geom.builders.UVPair;
+import net.minecraft.client.resources.model.geometry.BakedQuad;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
-import org.joml.Vector4f;
 
 import com.pockyl.diegesis.api.scene.PlaceSurface;
 
@@ -71,35 +71,25 @@ final class SceneLitConsumer implements VertexConsumer {
         return Math.min(FULL, Math.round(block)) | light & 0xFFFF0000;
     }
 
-    /** A face of a block model, cut into pieces, each corner of each piece lit by the scene's lights. */
+    /**
+     * A face of a block model, cut into pieces, each corner of each piece lit by the scene's lights. The face comes as the chunks'
+     * tesselator lights it: its shade and smooth lighting's corner shadows in each corner's colour, the world's light in its light.
+     */
     @Override
-    public void putBulkData(PoseStack.Pose pose, BakedQuad quad, float[] brightness, float red, float green, float blue, float alpha,
-            int[] lightmap, int overlay, boolean readColor) {
-        int[] data = quad.getVertices();
-        if (data.length != 32) {
-            VertexConsumer.super.putBulkData(pose, quad, brightness, red, green, blue, alpha, lightmap, overlay, readColor);
-            return;
-        }
-        Vec3i facing = quad.getDirection().getNormal();
-        Vector3f normal = pose.normal().transform(new Vector3f(facing.getX(), facing.getY(), facing.getZ()));
+    public void putBakedQuad(PoseStack.Pose pose, BakedQuad quad, QuadInstance instance) {
+        Vector3f normal = pose.transformNormal(quad.direction().getUnitVec3f(), new Vector3f());
+        int emission = quad.materialInfo().lightEmission();
+        int overlay = instance.overlayCoords();
         float[][] corner = new float[4][];
         for (int k = 0; k < 4; k++) {
-            int at = k * 8;
-            Vector4f position = pose.pose().transform(new Vector4f(Float.intBitsToFloat(data[at]), Float.intBitsToFloat(data[at + 1]),
-                    Float.intBitsToFloat(data[at + 2]), 1.0F));
-            int color = data[at + 3];
-            float shade = brightness[k];
-            float r = (readColor ? (color & 0xFF) / 255.0F : 1.0F) * shade * red;
-            float g = (readColor ? (color >> 8 & 0xFF) / 255.0F : 1.0F) * shade * green;
-            float b = (readColor ? (color >> 16 & 0xFF) / 255.0F : 1.0F) * shade * blue;
+            Vector3f position = pose.pose().transformPosition(quad.position(k), new Vector3f());
+            int color = instance.getColor(k);
             // A face's own light (emissive faces carry it) counts where it is brighter than the world's.
-            int baked = data[at + 6];
-            int light = lightmap[k];
-            float blockLight = Math.max(light & 0xFFFF, baked & 0xFFFF);
-            float skyLight = Math.max(light >>> 16 & 0xFFFF, baked >>> 16 & 0xFFFF);
-            float a = (readColor ? (color >>> 24) / 255.0F : 1.0F) * alpha;
-            corner[k] = new float[] {position.x(), position.y(), position.z(), r, g, b, Float.intBitsToFloat(data[at + 4]),
-                    Float.intBitsToFloat(data[at + 5]), blockLight, skyLight, a};
+            int light = instance.getLightCoordsWithEmission(k, emission);
+            long uv = quad.packedUV(k);
+            corner[k] = new float[] {position.x(), position.y(), position.z(), (color >> 16 & 0xFF) / 255.0F, (color >> 8 & 0xFF) / 255.0F,
+                    (color & 0xFF) / 255.0F, UVPair.unpackU(uv), UVPair.unpackV(uv), light & 0xFFFF, light >>> 16 & 0xFFFF,
+                    (color >>> 24) / 255.0F};
         }
         int across = pieces(corner[0], corner[1]);
         int down = pieces(corner[0], corner[3]);
@@ -188,6 +178,11 @@ final class SceneLitConsumer implements VertexConsumer {
     }
 
     @Override
+    public VertexConsumer setColor(int argb) {
+        return setColor(argb >> 16 & 0xFF, argb >> 8 & 0xFF, argb & 0xFF, argb >>> 24);
+    }
+
+    @Override
     public VertexConsumer setUv(float u, float v) {
         delegate.setUv(u, v);
         return this;
@@ -202,6 +197,18 @@ final class SceneLitConsumer implements VertexConsumer {
     @Override
     public VertexConsumer setUv2(int u, int v) {
         delegate.setUv2(u, v);
+        return this;
+    }
+
+    @Override
+    public VertexConsumer setLineWidth(float width) {
+        delegate.setLineWidth(width);
+        return this;
+    }
+
+    @Override
+    public VertexConsumer setUv3(float u, float v) {
+        delegate.setUv3(u, v);
         return this;
     }
 

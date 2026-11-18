@@ -65,6 +65,11 @@ final class BackFaceConsumer implements VertexConsumer {
     }
 
     @Override
+    public VertexConsumer setColor(int argb) {
+        return setColor(argb >> 16 & 0xFF, argb >> 8 & 0xFF, argb & 0xFF, argb >>> 24);
+    }
+
+    @Override
     public VertexConsumer setUv(float u, float v) {
         building[3] = u;
         building[4] = v;
@@ -80,6 +85,16 @@ final class BackFaceConsumer implements VertexConsumer {
     @Override
     public VertexConsumer setUv2(int u, int v) {
         buildingPacked[2] = u & 0xFFFF | v << 16;
+        return this;
+    }
+
+    @Override
+    public VertexConsumer setLineWidth(float width) {
+        return this;
+    }
+
+    @Override
+    public VertexConsumer setUv3(float u, float v) {
         return this;
     }
 

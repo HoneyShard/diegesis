@@ -1,11 +1,8 @@
 package com.pockyl.diegesis.impl.client.scene;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.block.model.BakedQuad;
-import net.minecraft.client.resources.model.BakedModel;
-import net.minecraft.core.Direction;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.RandomSource;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.state.BlockState;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
@@ -21,9 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** Hit boxes for nodes that do not declare a {@code collider}: from the behaviour, else from the visual. */
 final class DefaultColliders {
-    /** Integers per vertex in a baked quad (position, colour, uv, light, normal). */
-    private static final int VERTEX_STRIDE = 8;
-    private static final Map<ResourceLocation, Box> MODEL_BOUNDS = new ConcurrentHashMap<>();
+    private static final Map<Identifier, Box> MODEL_BOUNDS = new ConcurrentHashMap<>();
     private static final Map<BlockState, Box> BLOCK_BOUNDS = new ConcurrentHashMap<>();
 
     private DefaultColliders() {
@@ -62,7 +57,7 @@ final class DefaultColliders {
         } else if (visual.block().isPresent()) {
             BlockState state = visual.block().get();
             box = BLOCK_BOUNDS.computeIfAbsent(state,
-                    key -> bounds(Minecraft.getInstance().getBlockRenderer().getBlockModel(key), key));
+                    key -> bounds(com.pockyl.diegesis.impl.client.render.SceneDraw.blockModel(key), key));
         } else {
             box = new Box(new Vector3f(3.0F), new Vector3f(13.0F));
         }
@@ -71,27 +66,21 @@ final class DefaultColliders {
         return node.control().isPresent() ? shifted.inflate(0.5F) : shifted;
     }
 
-    private static Box modelBounds(ResourceLocation id) {
+    private static Box modelBounds(Identifier id) {
         return bounds(ClientPlatform.INSTANCE.getModel(id), null);
     }
 
     /** The box round every quad of a model, in pixels (a full block when it has none). */
-    private static Box bounds(BakedModel model, BlockState state) {
+    private static Box bounds(BlockStateModel model, BlockState state) {
         Vector3f min = new Vector3f(Float.MAX_VALUE);
         Vector3f max = new Vector3f(-Float.MAX_VALUE);
-        RandomSource random = RandomSource.create(42L);
-        for (Direction side : new Direction[] {null, Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.WEST,
-                Direction.EAST}) {
-            for (BakedQuad quad : model.getQuads(state, side, random)) {
-                int[] vertices = quad.getVertices();
-                for (int i = 0; i + 2 < vertices.length; i += VERTEX_STRIDE) {
-                    Vector3f point = new Vector3f(Float.intBitsToFloat(vertices[i]), Float.intBitsToFloat(vertices[i + 1]),
-                            Float.intBitsToFloat(vertices[i + 2])).mul(16.0F);
-                    min.min(point);
-                    max.max(point);
-                }
+        com.pockyl.diegesis.impl.client.render.SceneDraw.forEachQuad(model, quad -> {
+            for (int vertex = 0; vertex < 4; vertex++) {
+                Vector3f point = new Vector3f(quad.position(vertex)).mul(16.0F);
+                min.min(point);
+                max.max(point);
             }
-        }
+        });
         if (min.x > max.x) {
             return new Box(new Vector3f(0.0F), new Vector3f(16.0F));
         }

@@ -1,93 +1,126 @@
 package com.pockyl.diegesis.fabric;
 
 import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.model.loading.v1.ExtraModelKey;
 import net.fabricmc.fabric.api.client.model.loading.v1.ModelLoadingPlugin;
 import net.fabricmc.fabric.api.client.model.loading.v1.PreparableModelLoadingPlugin;
-import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
-import net.fabricmc.fabric.api.event.Event;
-import net.fabricmc.fabric.api.resource.IdentifiableResourceReloadListener;
-import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
-import net.minecraft.client.renderer.block.BlockModelShaper;
-import net.minecraft.client.resources.model.ModelResourceLocation;
-import net.minecraft.resources.ResourceLocation;
+import net.fabricmc.fabric.api.client.model.loading.v1.SimpleUnbakedExtraModel;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
+import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackType;
-import net.minecraft.server.packs.resources.ResourceManager;
-import net.minecraft.util.profiling.ProfilerFiller;
+import net.minecraft.server.packs.resources.PreparableReloadListener;
 
-import com.pockyl.diegesis.api.station.StationType;
-import com.pockyl.diegesis.impl.StationRegistry;
 import com.pockyl.diegesis.impl.client.DiegesisClientRuntime;
 import com.pockyl.diegesis.impl.client.debug.DebugView;
+import com.pockyl.diegesis.impl.client.focus.FocusController;
 import com.pockyl.diegesis.impl.client.hud.HudSlide;
 import com.pockyl.diegesis.impl.client.render.SceneRenderer;
 import com.pockyl.diegesis.impl.client.scene.SceneLibrary;
 
-import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.stream.Stream;
 
 public final class DiegesisFabricClient implements ClientModInitializer {
+    /**
+     * The HUD's parts that slide off while a player works at a station, by Fabric's id for each, and the name the slide keeps for
+     * it. The chat slides by a common mixin ({@code ChatComponentMixin}); the crosshair is not drawn at all.
+     */
+    private static final Map<Identifier, String> SLIDING = Map.ofEntries(
+            Map.entry(VanillaHudElements.HOTBAR, HudSlide.HOTBAR),
+            Map.entry(VanillaHudElements.HEALTH_BAR, "health"),
+            Map.entry(VanillaHudElements.ARMOR_BAR, "health"),
+            Map.entry(VanillaHudElements.FOOD_BAR, "health"),
+            Map.entry(VanillaHudElements.AIR_BAR, "health"),
+            Map.entry(VanillaHudElements.MOUNT_HEALTH, "vehicle_health"),
+            Map.entry(VanillaHudElements.INFO_BAR, "experience"),
+            Map.entry(VanillaHudElements.EXPERIENCE_LEVEL, "experience_level"),
+            Map.entry(VanillaHudElements.HELD_ITEM_TOOLTIP, "item_name"),
+            Map.entry(VanillaHudElements.MOB_EFFECTS, "effects"),
+            Map.entry(VanillaHudElements.SCOREBOARD, "scoreboard"),
+            Map.entry(VanillaHudElements.BOSS_BAR, "boss"));
+    /** The scene models the last resource load baked, by the id a scene names them with. */
+    private static volatile Map<Identifier, ExtraModelKey<BlockStateModel>> sceneModels = Map.of();
+
     @Override
     public void onInitializeClient() {
         DiegesisClientRuntime.init();
         FabricNetwork.registerClient();
         ClientTickEvents.END_CLIENT_TICK.register(client -> DiegesisClientRuntime.tick());
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, context) -> dispatcher.register(
-                ClientCommandManager.literal("diegesis").then(ClientCommandManager.literal("debug").executes(command -> {
+                ClientCommands.literal("diegesis").then(ClientCommands.literal("debug").executes(command -> {
                     DebugView.toggle();
                     return 1;
                 }))));
-        // What mods draw through the HUD hook slides away with the HUD as one part, around everybody's drawing.
-        ResourceLocation beforeHud = ResourceLocation.fromNamespaceAndPath("diegesis", "hud_slide_begin");
-        ResourceLocation afterHud = ResourceLocation.fromNamespaceAndPath("diegesis", "hud_slide_end");
-        HudRenderCallback.EVENT.addPhaseOrdering(beforeHud, Event.DEFAULT_PHASE);
-        HudRenderCallback.EVENT.addPhaseOrdering(Event.DEFAULT_PHASE, afterHud);
-        HudRenderCallback.EVENT.register(beforeHud, (graphics, deltaTracker) -> HudSlide.begin("fabric:hud", graphics));
-        HudRenderCallback.EVENT.register(afterHud, (graphics, deltaTracker) -> HudSlide.end(graphics));
-        WorldRenderEvents.AFTER_ENTITIES.register(context -> SceneRenderer.render(context.matrixStack(), context.positionMatrix(),
-                context.projectionMatrix(), context.camera()));
-        WorldRenderEvents.AFTER_TRANSLUCENT.register(context -> SceneRenderer.renderCounts());
-        ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new SceneReloadListener());
+        registerHud();
+        LevelRenderEvents.COLLECT_SUBMITS.register(context -> {
+            CameraRenderState camera = context.levelState().cameraRenderState;
+            SceneRenderer.render(context.submitNodeCollector(), context.poseStack(), camera.viewRotationMatrix, camera.projectionMatrix,
+                    Minecraft.getInstance().gameRenderer.mainCamera());
+        });
+        ResourceLoader.get(PackType.CLIENT_RESOURCES).registerReloadListener(SceneLibrary.ID, SceneLibrary.INSTANCE);
         PreparableModelLoadingPlugin.register(
-                (ResourceManager manager, Executor executor) -> CompletableFuture.supplyAsync(() -> SceneLibrary.modelsToLoad(manager), executor),
-                (Set<ResourceLocation> models, ModelLoadingPlugin.Context context) -> {
-                    context.addModels(models);
-                    Set<ModelResourceLocation> hideable = new HashSet<>();
-                    for (StationType type : StationRegistry.all()) {
-                        if (type.hidesBlock()) {
-                            Stream.concat(type.blocks().stream(), type.lateBlocks().stream())
-                                    .flatMap(block -> block.getStateDefinition().getPossibleStates().stream())
-                                    .map(BlockModelShaper::stateToModelLocation)
-                                    .forEach(hideable::add);
-                        }
+                (PreparableReloadListener.SharedState state, Executor executor) -> CompletableFuture.supplyAsync(
+                        () -> SceneLibrary.modelsToLoad(state.resourceManager()), executor),
+                (Set<Identifier> models, ModelLoadingPlugin.Context context) -> {
+                    Map<Identifier, ExtraModelKey<BlockStateModel>> keys = new HashMap<>();
+                    for (Identifier model : models) {
+                        ExtraModelKey<BlockStateModel> key = ExtraModelKey.create(model::toString);
+                        context.addModel(key, SimpleUnbakedExtraModel.blockStateModel(model));
+                        keys.put(model, key);
                     }
-                    context.modifyModelAfterBake().register((model, modify) -> model != null && modify.topLevelId() != null
-                            && hideable.contains(modify.topLevelId()) ? new HideableFabricModel(model) : model);
+                    sceneModels = Map.copyOf(keys);
                 });
     }
 
-    /** The scene library under Fabric's reload listener id. */
-    private static final class SceneReloadListener implements IdentifiableResourceReloadListener {
-        @Override
-        public ResourceLocation getFabricId() {
-            return SceneLibrary.ID;
-        }
+    /** The key a scene model was baked under; null when no scene names it. */
+    static ExtraModelKey<BlockStateModel> sceneModel(Identifier id) {
+        return sceneModels.get(id);
+    }
 
-        @Override
-        public CompletableFuture<Void> reload(PreparationBarrier barrier, ResourceManager manager, ProfilerFiller preparationsProfiler,
-                ProfilerFiller reloadProfiler, Executor backgroundExecutor, Executor gameExecutor) {
-            return SceneLibrary.INSTANCE.reload(barrier, manager, preparationsProfiler, reloadProfiler, backgroundExecutor, gameExecutor);
-        }
+    /**
+     * While the player works at a station its interface replaces the HUD (when the scene says so): each part slides off to its
+     * nearest edge, then is not drawn. The parts other mods add slide only when they are drawn through vanilla's.
+     */
+    private static void registerHud() {
+        SLIDING.forEach((id, key) -> HudElementRegistry.replaceElement(id, element -> sliding(key, element)));
+        // The crosshair is where the player aims, and the player no longer aims.
+        HudElementRegistry.replaceElement(VanillaHudElements.CROSSHAIR, element -> (graphics, deltaTracker) -> {
+            if (!hides()) {
+                element.extractRenderState(graphics, deltaTracker);
+            }
+        });
+    }
 
-        @Override
-        public String getName() {
-            return SceneLibrary.ID.toString();
-        }
+    /** A part not drawn once the HUD is off the screen, else drawn where the slide has it. */
+    private static HudElement sliding(String key, HudElement element) {
+        return (graphics, deltaTracker) -> {
+            if (hides() && HudSlide.gone()) {
+                return;
+            }
+            HudSlide.begin(key, graphics);
+            try {
+                element.extractRenderState(graphics, deltaTracker);
+            } finally {
+                HudSlide.end(graphics);
+            }
+        };
+    }
+
+    private static boolean hides() {
+        FocusController focus = FocusController.get();
+        return focus.isActive() && focus.options().hideHud();
     }
 }

@@ -12,7 +12,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The blocks whose own model is not drawn now, because a scene shows them instead ({@code StationType.Builder.hidesBlock}).
- * The models of such blocks are wrapped when they are baked; the wrappers ask here, on the threads that build the chunks.
+ * The chunk mesh builder reads such blocks as air ({@code RenderChunkRegionMixin}); it asks here, on the threads that build the
+ * chunks.
  */
 public final class HiddenBlocks {
     private static final Set<BlockPos> HIDDEN = ConcurrentHashMap.newKeySet();
@@ -122,7 +123,7 @@ public final class HiddenBlocks {
         for (BlockPos pos : changed) {
             if (minecraft.level != null) {
                 BlockState state = minecraft.level.getBlockState(pos);
-                minecraft.levelRenderer.blockChanged(minecraft.level, pos, state, state, Block.UPDATE_IMMEDIATE);
+                minecraft.level.sendBlockUpdated(pos, state, state, Block.UPDATE_IMMEDIATE);
             }
         }
     }

@@ -7,17 +7,13 @@ plugins {
 
 neoForge {
     neoFormVersion = neo_form_version
-    parchment {
-        mappingsVersion = parchment_mappings_version
-        minecraftVersion = parchment_minecraft_version
-    }
 }
 
 dependencies {
     compileOnly 'org.spongepowered:mixin:0.8.5'
     compileOnly 'org.ow2.asm:asm-tree:9.7.1'
     // Sable's companion API, bundled by Sable on both loaders: impl.SableSubLevels compiles against it.
-    compileOnly "dev.ryanhcode.sable-companion:sable-companion-common-${minecraft_version}:${sable_companion_version}"
+    compileOnly "dev.ryanhcode.sable-companion:sable-companion-common-${sable_companion_minecraft_version}:${sable_companion_version}"
 }
 
 configurations {
