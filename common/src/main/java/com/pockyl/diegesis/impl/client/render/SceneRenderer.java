@@ -135,6 +135,8 @@ public final class SceneRenderer {
     private static final Matrix4f TO_WORLD = new Matrix4f();
     /** The block of the station being drawn, which a visual lit as its block takes its light from. */
     private static net.minecraft.core.BlockPos drawnPos;
+    /** The camera the station is drawn from, to find the world block a model lit as a block stands in. */
+    private static Vec3 drawnCamera;
     /** The scene's lights while its nodes are drawn, for the models lit as a block; null outside that. */
     private static List<float[]> drawnLights;
     private static List<com.pockyl.diegesis.api.scene.PlaceSurface> drawnSurfaces = List.of();
@@ -339,6 +341,7 @@ public final class SceneRenderer {
     private static void renderStation(ClientStation station, PoseStack poseStack, Vec3 camera, MultiBufferSource buffers,
             ClientLevel level) {
         drawnPos = station.pos();
+        drawnCamera = camera;
         BlockPos pos = station.pos();
         int light = lightAt(level, pos);
         poseStack.pushPose();
@@ -597,6 +600,19 @@ public final class SceneRenderer {
         }
     }
 
+    /**
+     * The world block a model lit as a block stands in: the one holding the middle of its own first block (its pixels 0..16), so
+     * that a multiblock's scene drawn as one model a block takes each its own block's light and corner shadows. A model in the
+     * station's block, as most are, is lit by that block.
+     */
+    private static BlockPos standsIn(PoseStack poseStack) {
+        if (drawnCamera == null) {
+            return drawnPos;
+        }
+        Vector3f middle = new Matrix4f(TO_WORLD).mul(poseStack.last().pose()).transformPosition(new Vector3f(0.5F, 0.5F, 0.5F));
+        return BlockPos.containing(drawnCamera.x + middle.x, drawnCamera.y + middle.y, drawnCamera.z + middle.z);
+    }
+
     private static boolean isBlockSheet(RenderType type) {
         return type == Sheets.cutoutBlockSheet() || type == Sheets.translucentCullBlockSheet() || type == Sheets.translucentItemSheet()
                 || type == Sheets.solidBlockSheet();
@@ -649,7 +665,7 @@ public final class SceneRenderer {
                 // The scene's own lights (a lantern on a shelf) brighten the walls and boards around them.
                 lit = new SceneLitConsumer(lit, TO_STATION, NORMAL_TO_STATION, drawnLights, drawnSurfaces);
             }
-            BlockLit.draw(model, state != null ? state : level.getBlockState(drawnPos), drawnPos, poseStack,
+            BlockLit.draw(model, state != null ? state : level.getBlockState(drawnPos), standsIn(poseStack), poseStack,
                     tint != Visual.WHITE ? new TintedConsumer(lit, tint) : lit, TO_WORLD);
             poseStack.popPose();
             return;

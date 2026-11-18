@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stack counts drawn on top are no longer cut by a block standing in front of them: a log in a furnace showed "4" for 54.
 - A multiblock station whose scene shows while nobody works at it is drawn once, at its main block: each of its other blocks
   drew the scene too, out of place, while it was in use.
+- A block model lit as a block (`lit_as_block`) takes its light and corner shadows from the world block it stands in, no longer
+  always from the station's block: a multiblock's scene drawn block by block is shaded as the blocks it stands in for.
 
 ## [1.0.0-beta.12+1.20.1] - 2026-11-17
 ### Added
