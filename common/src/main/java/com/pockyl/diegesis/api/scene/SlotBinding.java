@@ -21,9 +21,11 @@ import java.util.Optional;
  *                  swimming in a pot (the hover outline stays)
  * @param countFacing which way the count's digits face: lying on the slot ({@code up}), or standing at the item's foot facing the
  *                    block's front ({@code front}), for an item standing in a wall's hollow that the camera looks at straight
+ * @param idleHighlight how strongly the square shows while the cursor is elsewhere (0 to 1 of the hovered one), so the places
+ *                      to put things are seen at a glance; 0, the default, shows it only under the cursor
  */
 public record SlotBinding(SlotRef slot, ItemDisplay display, float size, Optional<Float> itemSize, Counts counts, boolean highlight,
-        CountFacing countFacing) {
+        CountFacing countFacing, float idleHighlight) {
     public static final Codec<SlotBinding> CODEC = StrictCodecs.record(instance -> instance.group(
             SlotRef.CODEC.fieldOf("slot").forGetter(SlotBinding::slot),
             StrictCodecs.optional(ItemDisplay.CODEC, "display", ItemDisplay.FLAT).forGetter(SlotBinding::display),
@@ -31,8 +33,15 @@ public record SlotBinding(SlotRef slot, ItemDisplay display, float size, Optiona
             StrictCodecs.optional(Codec.floatRange(0.5F, 64.0F), "item_size").forGetter(SlotBinding::itemSize),
             StrictCodecs.optional(Counts.CODEC, "counts", Counts.ALWAYS).forGetter(SlotBinding::counts),
             StrictCodecs.optional(Codec.BOOL, "highlight", true).forGetter(SlotBinding::highlight),
-            StrictCodecs.optional(CountFacing.CODEC, "count_facing", CountFacing.UP).forGetter(SlotBinding::countFacing)
+            StrictCodecs.optional(CountFacing.CODEC, "count_facing", CountFacing.UP).forGetter(SlotBinding::countFacing),
+            StrictCodecs.optional(Codec.floatRange(0.0F, 1.0F), "idle_highlight", 0.0F).forGetter(SlotBinding::idleHighlight)
     ).apply(instance, SlotBinding::new));
+
+    /** A slot whose square shows only under the cursor. */
+    public SlotBinding(SlotRef slot, ItemDisplay display, float size, Optional<Float> itemSize, Counts counts, boolean highlight,
+            CountFacing countFacing) {
+        this(slot, display, size, itemSize, counts, highlight, countFacing, 0.0F);
+    }
 
     /** A slot whose count lies on it. */
     public SlotBinding(SlotRef slot, ItemDisplay display, float size, Optional<Float> itemSize, Counts counts, boolean highlight) {

@@ -17,6 +17,7 @@ import com.pockyl.diegesis.api.station.StationType;
 import com.pockyl.diegesis.impl.StationRegistry;
 import com.pockyl.diegesis.impl.SubLevels;
 import com.pockyl.diegesis.impl.client.focus.FocusController;
+import com.pockyl.diegesis.impl.client.menu.MenuSession;
 import com.pockyl.diegesis.impl.network.DiegesisNetwork;
 import com.pockyl.diegesis.impl.network.Packets;
 import com.pockyl.diegesis.platform.ClientPlatform;
@@ -28,6 +29,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class DiegesisClientRuntime {
     /** Station types whose open condition threw, each logged once. */
     private static final Set<ResourceLocation> FAILED_CONDITIONS = ConcurrentHashMap.newKeySet();
+    /** The use being sent is the menu of a station gone over to: {@link #onUseBlock} lets it through. */
+    private static boolean usingForMenu;
 
     private DiegesisClientRuntime() {
     }
@@ -47,7 +50,7 @@ public final class DiegesisClientRuntime {
      * use is then not sent to the server, so the block's own GUI does not open - or null to let the use go on.
      */
     public static InteractionResult onUseBlock(LocalPlayer player, InteractionHand hand, BlockHitResult hit) {
-        if (hand != InteractionHand.MAIN_HAND || StationRegistry.isEmpty()) {
+        if (usingForMenu || hand != InteractionHand.MAIN_HAND || StationRegistry.isEmpty()) {
             return null;
         }
         FocusController focus = FocusController.get();
@@ -143,7 +146,7 @@ public final class DiegesisClientRuntime {
     public static boolean goOver(BlockPos pos, float seconds) {
         LocalPlayer player = Minecraft.getInstance().player;
         FocusController focus = FocusController.get();
-        if (player == null || !focus.isInteractive() && !focus.isGoingOver()) {
+        if (player == null || !focus.isInteractive() && !focus.isGoingOver() || !focus.canGoOver()) {
             return false;
         }
         BlockState state = player.level().getBlockState(pos);
@@ -153,21 +156,55 @@ public final class DiegesisClientRuntime {
             return false;
         }
         boolean server = type.authority() == Authority.SERVER;
-        if (focus.station().type().authority() == Authority.SERVER && !server) {
+        boolean menu = type.authority() == Authority.MENU;
+        Authority leftAuthority = focus.station().type().authority();
+        if (leftAuthority == Authority.SERVER && !server) {
             ClientPlatform.INSTANCE.sendToServer(new Packets.Close());
+        }
+        if (leftAuthority == Authority.MENU) {
+            // Its menu closes on the server before the next use arrives there: a crafting grid gives its items back as on leaving.
+            MenuSession.get().leave(focus.station());
         }
         ClientStation station = prepare(player, type, pos, state);
         if (server) {
             // The server ends the use of the station left as it opens this one.
             ClientPlatform.INSTANCE.sendToServer(new Packets.Open(pos));
         }
-        focus.goOver(station, server, seconds);
+        if (menu) {
+            // A use of its own, as vanilla sends it, once no earlier use is still unanswered.
+            MenuSession.get().useNext(station, () -> useForMenu(player, pos));
+        }
+        focus.goOver(station, server || menu, seconds);
         return true;
     }
 
-    /** Whether the player may go over between stations of these types: not to or from a menu station, which needs a use of its own. */
+    /**
+     * Sends the use of a menu station's block the player goes over to, as a right click on its face towards them would, past
+     * {@link #onUseBlock}: the station is already taken, only its menu is wanted.
+     */
+    private static void useForMenu(LocalPlayer player, BlockPos pos) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.gameMode == null || minecraft.player != player) {
+            return;
+        }
+        net.minecraft.world.phys.Vec3 eye = player.getEyePosition();
+        net.minecraft.world.phys.Vec3 center = pos.getCenter();
+        Direction face = Direction.getNearest(eye.x - center.x, eye.y - center.y, eye.z - center.z);
+        net.minecraft.world.phys.Vec3 at = center.add(face.getStepX() * 0.5, face.getStepY() * 0.5, face.getStepZ() * 0.5);
+        usingForMenu = true;
+        try {
+            minecraft.gameMode.useItemOn(player, InteractionHand.MAIN_HAND, new BlockHitResult(at, face, pos, false));
+        } finally {
+            usingForMenu = false;
+        }
+    }
+
+    /**
+     * Whether the player may go over between stations of these types. A menu station takes part with stations of every kind:
+     * its menu is closed on leaving and a use of its own opens the next one's.
+     */
     public static boolean joinsNeighbors(StationType from, StationType to) {
-        return from.authority() != Authority.MENU && to.authority() != Authority.MENU;
+        return true;
     }
 
     /** Whether the camera is taken over this frame; the camera hook asks first. */

@@ -134,6 +134,8 @@ public final class SceneRenderer {
     private static final Matrix4f TO_WORLD = new Matrix4f();
     /** The block of the station being drawn, which a visual lit as its block takes its light from. */
     private static net.minecraft.core.BlockPos drawnPos;
+    /** The camera the station is drawn from, to find the world block a model lit as a block stands in. */
+    private static Vec3 drawnCamera;
     /** The scene's lights while its nodes are drawn, for the models lit as a block; null outside that. */
     private static List<float[]> drawnLights;
     private static List<com.pockyl.diegesis.api.scene.PlaceSurface> drawnSurfaces = List.of();
@@ -197,6 +199,12 @@ public final class SceneRenderer {
             for (RenderType type : List.of(RenderType.cutout(), Sheets.cutoutBlockSheet(), OVERLAY, ITEMS, SceneParticles.TYPE,
                     Sheets.translucentCullBlockSheet())) {
                 kept.put(type, new ByteBufferBuilder(1 << 16));
+            }
+            // Enchantment glints test for the very depth their item wrote: kept apart, they are drawn after the items, as the
+            // game keeps them; in the shared buffer they went out first, before any item, and showed nowhere.
+            for (RenderType type : List.of(RenderType.glint(), RenderType.glintTranslucent(),
+                    RenderType.entityGlint(), RenderType.entityGlintDirect())) {
+                kept.put(type, new ByteBufferBuilder(1 << 12));
             }
             sceneBuffers = MultiBufferSource.immediateWithBuffers(kept, new ByteBufferBuilder(1 << 16));
         }
@@ -335,6 +343,7 @@ public final class SceneRenderer {
     private static void renderStation(ClientStation station, PoseStack poseStack, Vec3 camera, MultiBufferSource buffers,
             ClientLevel level) {
         drawnPos = station.pos();
+        drawnCamera = camera;
         BlockPos pos = station.pos();
         int light = lightAt(level, pos);
         poseStack.pushPose();
@@ -417,8 +426,14 @@ public final class SceneRenderer {
             }
             definition.slot().ifPresent(slot -> {
                 boolean marked = local && (node.isHovered() || input.isSpreadTarget(new Target.Station(slot.slot())));
-                if (marked && slot.highlight()) {
-                    renderHighlight(poseStack, buffers, slot.size() + 0.2F, node.isHovered() ? 1.0F : 0.66F);
+                float strength = marked ? node.isHovered() ? 1.0F : 0.66F : local && station.isInUse() ? slot.idleHighlight() : 0.0F;
+                if (strength > 0.0F && slot.highlight()) {
+                    if (slot.display() == SlotBinding.ItemDisplay.UPRIGHT) {
+                        // An item standing up is marked in its own plane, behind it, not on the ground at its foot.
+                        renderStandingHighlight(poseStack, buffers, slot.size() + 0.2F, strength);
+                    } else {
+                        renderHighlight(poseStack, buffers, slot.size() + 0.2F, strength);
+                    }
                 }
                 ItemStack stack = station.state().getItem(slot.slot());
                 ItemStack spread = local ? input.spreadPreview(new Target.Station(slot.slot())) : ItemStack.EMPTY;
@@ -461,11 +476,12 @@ public final class SceneRenderer {
             Vector3fc at = carried.stationPos();
             poseStack.translate(at.x(), at.y() + 0.4F, at.z());
             int left = input.spreadLeft();
-            if (left >= 0) {
-                // A drag over several slots: what stays in the hand once it is let go.
-                renderCount(poseStack, buffers, String.valueOf(left), carried.size() * 1.1F);
-            } else {
-                renderCount(poseStack, buffers, carried.stack(), carried.size() * 1.1F);
+            // A drag over several slots: what stays in the hand once it is let go.
+            int count = left >= 0 ? left : carried.stack().getCount();
+            if (left >= 0 || count > 1) {
+                SlotBinding.CountFacing facing = scene.definition().ui().carryCountFacing();
+                renderCount(poseStack, buffers, String.valueOf(count), carried.size() * 1.1F, facing != SlotBinding.CountFacing.UP, -1.0F,
+                        facing == SlotBinding.CountFacing.CAMERA);
             }
             poseStack.popPose();
         }
@@ -589,6 +605,19 @@ public final class SceneRenderer {
         }
     }
 
+    /**
+     * The world block a model lit as a block stands in: the one holding the middle of its own first block (its pixels 0..16), so
+     * that a multiblock's scene drawn as one model a block takes each its own block's light and corner shadows. A model in the
+     * station's block, as most are, is lit by that block.
+     */
+    private static BlockPos standsIn(PoseStack poseStack) {
+        if (drawnCamera == null) {
+            return drawnPos;
+        }
+        Vector3f middle = new Matrix4f(TO_WORLD).mul(poseStack.last().pose()).transformPosition(new Vector3f(0.5F, 0.5F, 0.5F));
+        return BlockPos.containing(drawnCamera.x + middle.x, drawnCamera.y + middle.y, drawnCamera.z + middle.z);
+    }
+
     private static boolean isBlockSheet(RenderType type) {
         return type == Sheets.cutoutBlockSheet() || type == Sheets.translucentCullBlockSheet() || type == Sheets.translucentItemSheet()
                 || type == Sheets.solidBlockSheet();
@@ -641,7 +670,7 @@ public final class SceneRenderer {
                 // The scene's own lights (a lantern on a shelf) brighten the walls and boards around them.
                 lit = new SceneLitConsumer(lit, TO_STATION, NORMAL_TO_STATION, drawnLights, drawnSurfaces);
             }
-            BlockLit.draw(model, state != null ? state : level.getBlockState(drawnPos), drawnPos, poseStack,
+            BlockLit.draw(model, state != null ? state : level.getBlockState(drawnPos), standsIn(poseStack), poseStack,
                     tint != Visual.WHITE ? new TintedConsumer(lit, tint) : lit, TO_WORLD);
             poseStack.popPose();
             return;
@@ -911,6 +940,10 @@ public final class SceneRenderer {
         }
         // Everything of this frame so far must be on screen first, or items drawn later would paint over the numbers.
         buffers.endBatch();
+        // The see-through text type only leaves the depth test as it finds it ("always" is no change), and the level leaves it
+        // on after the particles: a block item standing before its number (a log in the furnace) hid the digits over it.
+        boolean depthTest = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+        RenderSystem.disableDepthTest();
         Font font = Minecraft.getInstance().font;
         for (Count count : PENDING_COUNTS) {
             font.drawInBatch(count.text(), count.x(), count.y(), 0xFF3F3F3F, false, count.shadow(), buffers,
@@ -922,6 +955,9 @@ public final class SceneRenderer {
         }
         PENDING_COUNTS.clear();
         buffers.endBatch();
+        if (depthTest) {
+            RenderSystem.enableDepthTest();
+        }
     }
 
     /** A count waiting to be drawn on top: its text, position in font units and matrices. */
@@ -1028,6 +1064,33 @@ public final class SceneRenderer {
         int color = ui.highlightColor();
         int alpha = Math.round((color >>> 24) * strength);
         renderSquare(poseStack, buffers, size, alpha << 24 | color & 0xFFFFFF);
+    }
+
+    /** The highlight of a slot whose item stands up: a square in the item's plane, from its foot up, just behind it. */
+    private static void renderStandingHighlight(PoseStack poseStack, MultiBufferSource buffers, float size, float strength) {
+        int color = ui.highlightColor();
+        int argb = Math.round((color >>> 24) * strength) << 24 | color & 0xFFFFFF;
+        TextureAtlasSprite sprite = Minecraft.getInstance().getTextureAtlas(TextureAtlas.LOCATION_BLOCKS).apply(HIGHLIGHT_SPRITE);
+        VertexConsumer consumer = buffers.getBuffer(OVERLAY);
+        PoseStack.Pose pose = poseStack.last();
+        float h = size / 2.0F;
+        float z = size * 0.08F;
+        // Both faces: a behaviour may turn the node so that the camera sees it from behind.
+        standingVertex(consumer, pose, -h, 0.0F, z, sprite.getU0(), sprite.getV1(), argb);
+        standingVertex(consumer, pose, -h, size, z, sprite.getU0(), sprite.getV0(), argb);
+        standingVertex(consumer, pose, h, size, z, sprite.getU1(), sprite.getV0(), argb);
+        standingVertex(consumer, pose, h, 0.0F, z, sprite.getU1(), sprite.getV1(), argb);
+        standingVertex(consumer, pose, h, 0.0F, z, sprite.getU1(), sprite.getV1(), argb);
+        standingVertex(consumer, pose, h, size, z, sprite.getU1(), sprite.getV0(), argb);
+        standingVertex(consumer, pose, -h, size, z, sprite.getU0(), sprite.getV0(), argb);
+        standingVertex(consumer, pose, -h, 0.0F, z, sprite.getU0(), sprite.getV1(), argb);
+    }
+
+    private static void standingVertex(VertexConsumer consumer, PoseStack.Pose pose, float x, float y, float z, float u, float v, int argb) {
+        Vector3f point = pose.pose().transformPosition(new Vector3f(x, y, z));
+        Vector3f normal = pose.normal().transform(new Vector3f(0.0F, 0.0F, -1.0F));
+        consumer.addVertex(point.x, point.y, point.z, argb, u, v, OverlayTexture.NO_OVERLAY, LightTexture.FULL_BRIGHT, normal.x, normal.y,
+                normal.z);
     }
 
     /** A flat square of colour on the surface at the slot (wells, highlights). */

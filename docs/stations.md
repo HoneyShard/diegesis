@@ -74,7 +74,9 @@ At least one block, supplier or tag is required.
 
   Client code: `StationView.menu()` (`MenuAccess`: the menu itself for its data, clicks, `quickMoveFromInventory` for an
   automatic shift-click that waits until the menu has been open a moment, `pressButton`), `StationBehavior.onMenuOpened`
-  and `onMenuRefused` (`TIMEOUT`, `OTHER_MENU`, `CLOSED_BY_SERVER`). Menu stations do not go over to neighbours yet.
+  and `onMenuRefused` (`TIMEOUT`, `OTHER_MENU`, `CLOSED_BY_SERVER`). Menu stations go over to neighbours of
+  every kind like the others: the menu of the station left is closed, and the block gone over to gets a use of its own, sent
+  once any earlier use has been answered.
 
   At a menu station the wheel over a stack moves one item at a time (down: to the other side, up: one more of the same here).
   With a stack in the hand, at any station, the wheel over a slot puts one of it in (down) or takes one of the same back into

@@ -147,6 +147,14 @@ public final class DiegesisClient {
         return com.pockyl.diegesis.impl.client.focus.FocusScreen.hoveredStack();
     }
 
+    /**
+     * Buffers for an item a {@link NodePainter} draws: the scene's item type, which writes depth, so the item hides what is behind it
+     * and its enchantment glint shows, as on the items lying in slots. Pass the painter's buffers.
+     */
+    public static net.minecraft.client.renderer.MultiBufferSource items(net.minecraft.client.renderer.MultiBufferSource buffers) {
+        return com.pockyl.diegesis.impl.client.render.SceneRenderer.solidItems(buffers);
+    }
+
     /** The station the local player works at. */
     public static Optional<StationView> focusedStation() {
         return Optional.ofNullable(FocusController.get().station());

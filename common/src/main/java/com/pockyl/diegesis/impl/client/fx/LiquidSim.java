@@ -26,8 +26,11 @@ public final class LiquidSim {
     private static final float WAVE_DAMPING = 0.972F;
     private static final float SETTLE = 0.996F;
     private static final float ASLEEP = 0.004F;
-    /** The highest wave, node pixels. */
-    private static final float MAX_WAVE = 1.4F;
+    /**
+     * The highest wave, node pixels: a guard against a runaway sim only. Waves that reach it are cut off flat, a lid on the liquid,
+     * so stirring must never reach it (1.4 did in a shallow mixing bowl).
+     */
+    private static final float MAX_WAVE = 4.0F;
     /** Pixels per second squared that tip the surface by 45 degrees. */
     private static final float GRAVITY = 900.0F;
     /** Sets the rocking's pitch: a vessel 6 pixels wide, deep compared to that, rocks at about 11 radians a second. */

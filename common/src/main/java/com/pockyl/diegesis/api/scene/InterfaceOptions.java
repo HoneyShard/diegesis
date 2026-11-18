@@ -1,6 +1,8 @@
 package com.pockyl.diegesis.api.scene;
 
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 
 import com.pockyl.diegesis.impl.codec.StrictCodecs;
 
@@ -30,12 +32,33 @@ import java.util.Optional;
  * @param hoverOutline   the object under the cursor that the player can use (carry, operate, click, take) gets an
  *                       outline round its silhouette
  * @param outlineColor   RGB colour of that outline
+ * @param carryCountFacing which way the held stack's count faces: turned to the camera ({@code camera}, owner 2026-11-18: "it
+ *                       should face the player, as in the slots"), lying flat over the stack ({@code up}, as before) or standing
+ *                       towards the scene's front ({@code front})
  */
 public record InterfaceOptions(boolean hideHud, boolean hideChat, boolean hidePlayer, boolean inventoryPanel, boolean showCounts,
         boolean countsOnTop, int highlightColor, boolean shadows, float shadowOpacity, float carryLift, boolean carryStick, float carrySway,
-        Optional<Float> carryMargin, boolean sounds, boolean hoverOutline, int outlineColor) {
+        Optional<Float> carryMargin, boolean sounds, boolean hoverOutline, int outlineColor, SlotBinding.CountFacing carryCountFacing) {
     public static final InterfaceOptions DEFAULT = new InterfaceOptions(true, true, false, true, true, true, 0x4DFFFFFF, true, 0.5F, 2.5F,
-            false, 1.0F, Optional.empty(), true, true, 0xFFE6E6E6);
+            false, 1.0F, Optional.empty(), true, true, 0xFFE6E6E6, SlotBinding.CountFacing.CAMERA);
+
+    /** Without {@code carryCountFacing}: the held stack's count turns to the camera, as by default. */
+    public InterfaceOptions(boolean hideHud, boolean hideChat, boolean hidePlayer, boolean inventoryPanel, boolean showCounts,
+            boolean countsOnTop, int highlightColor, boolean shadows, float shadowOpacity, float carryLift, boolean carryStick, float carrySway,
+            Optional<Float> carryMargin, boolean sounds, boolean hoverOutline, int outlineColor) {
+        this(hideHud, hideChat, hidePlayer, inventoryPanel, showCounts, countsOnTop, highlightColor, shadows, shadowOpacity, carryLift,
+                carryStick, carrySway, carryMargin, sounds, hoverOutline, outlineColor, SlotBinding.CountFacing.CAMERA);
+    }
+
+    /** The outline and the held count, read as one part of the object (a record codec takes at most 16 fields). */
+    private record Looks(boolean hoverOutline, int outlineColor, SlotBinding.CountFacing carryCountFacing) {
+        static final MapCodec<Looks> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+                StrictCodecs.optional(Codec.BOOL, "hover_outline", DEFAULT.hoverOutline).forGetter(Looks::hoverOutline),
+                StrictCodecs.optional(Visual.COLOR, "outline_color", DEFAULT.outlineColor).forGetter(Looks::outlineColor),
+                StrictCodecs.optional(SlotBinding.CountFacing.CODEC, "carry_count_facing", DEFAULT.carryCountFacing)
+                        .forGetter(Looks::carryCountFacing)
+        ).apply(instance, Looks::new));
+    }
 
     public static final Codec<InterfaceOptions> CODEC = StrictCodecs.record(instance -> instance.group(
             StrictCodecs.optional(Codec.BOOL, "hide_hud", DEFAULT.hideHud).forGetter(InterfaceOptions::hideHud),
@@ -53,9 +76,11 @@ public record InterfaceOptions(boolean hideHud, boolean hideChat, boolean hidePl
             StrictCodecs.optional(Codec.floatRange(0.0F, 4.0F), "carry_sway", DEFAULT.carrySway).forGetter(InterfaceOptions::carrySway),
             StrictCodecs.optional(Codec.floatRange(0.0F, 256.0F), "carry_margin").forGetter(InterfaceOptions::carryMargin),
             StrictCodecs.optional(Codec.BOOL, "sounds", DEFAULT.sounds).forGetter(InterfaceOptions::sounds),
-            StrictCodecs.optional(Codec.BOOL, "hover_outline", DEFAULT.hoverOutline).forGetter(InterfaceOptions::hoverOutline),
-            StrictCodecs.optional(Visual.COLOR, "outline_color", DEFAULT.outlineColor).forGetter(InterfaceOptions::outlineColor)
-    ).apply(instance, InterfaceOptions::new));
+            Looks.MAP_CODEC.forGetter(options -> new Looks(options.hoverOutline, options.outlineColor, options.carryCountFacing))
+    ).apply(instance, (hideHud, hideChat, hidePlayer, inventoryPanel, showCounts, countsOnTop, highlightColor, shadows, shadowOpacity,
+            carryLift, carryStick, carrySway, carryMargin, sounds, looks) -> new InterfaceOptions(hideHud, hideChat, hidePlayer,
+            inventoryPanel, showCounts, countsOnTop, highlightColor, shadows, shadowOpacity, carryLift, carryStick, carrySway, carryMargin,
+            sounds, looks.hoverOutline, looks.outlineColor, looks.carryCountFacing)));
 
     /** Starts from the defaults, for scenes built in code. */
     public static Builder builder() {
@@ -83,6 +108,7 @@ public record InterfaceOptions(boolean hideHud, boolean hideChat, boolean hidePl
         private boolean sounds;
         private boolean hoverOutline;
         private int outlineColor;
+        private SlotBinding.CountFacing carryCountFacing;
 
         private Builder(InterfaceOptions from) {
             hideHud = from.hideHud;
@@ -100,6 +126,7 @@ public record InterfaceOptions(boolean hideHud, boolean hideChat, boolean hidePl
             carryMargin = from.carryMargin;
             hoverOutline = from.hoverOutline;
             outlineColor = from.outlineColor;
+            carryCountFacing = from.carryCountFacing;
             sounds = from.sounds;
         }
 
@@ -169,9 +196,15 @@ public record InterfaceOptions(boolean hideHud, boolean hideChat, boolean hidePl
             return this;
         }
 
+        /** Which way the held stack's count faces. */
+        public Builder carryCountFacing(SlotBinding.CountFacing facing) {
+            carryCountFacing = facing;
+            return this;
+        }
+
         public InterfaceOptions build() {
             return new InterfaceOptions(hideHud, hideChat, hidePlayer, inventoryPanel, showCounts, countsOnTop, highlightColor, shadows, shadowOpacity,
-                    carryLift, carryStick, carrySway, carryMargin, sounds, hoverOutline, outlineColor);
+                    carryLift, carryStick, carrySway, carryMargin, sounds, hoverOutline, outlineColor, carryCountFacing);
         }
     }
 }

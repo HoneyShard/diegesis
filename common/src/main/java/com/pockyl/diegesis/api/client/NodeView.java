@@ -100,6 +100,13 @@ public interface NodeView {
      */
     void setTooltip(Component text);
 
+    /**
+     * The item a node draws itself (a result hovering over the work, painted by the behaviour): its tooltip shows next to the cursor
+     * over the node, as over a slot, and recipe viewers' keys work there. Empty: none, the text tooltip again.
+     */
+    default void setTooltipItem(net.minecraft.world.item.ItemStack stack) {
+    }
+
     /** Multiplies an ARGB colour into the node's visual (alpha below 255 fades it). */
     void setTint(int argb);
 

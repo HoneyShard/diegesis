@@ -196,7 +196,7 @@ public final class FocusScreen extends Screen {
             return player.getInventory().getItem(slot);
         }
         NodeInstance node = input.hovered();
-        return node == null ? ItemStack.EMPTY : itemOf(station, node.definition());
+        return node == null ? ItemStack.EMPTY : itemOf(station, node);
     }
 
     /** Whether the drawer keeps the hotbar in place and builds on it ({@code layout: hotbar}). */
@@ -469,7 +469,7 @@ public final class FocusScreen extends Screen {
         NodeInstance node = input.hovered();
         ClientStation station = FocusController.get().station();
         if (node != null && station != null) {
-            ItemStack shown = itemOf(station, node.definition());
+            ItemStack shown = itemOf(station, node);
             net.minecraft.network.chat.Component text = node.tooltip();
             if (!shown.isEmpty()) {
                 graphics.renderTooltip(font, shown, mouseX, mouseY);
@@ -675,14 +675,15 @@ public final class FocusScreen extends Screen {
         }
     }
 
-    private static ItemStack itemOf(ClientStation station, NodeDefinition node) {
+    private static ItemStack itemOf(ClientStation station, NodeInstance instance) {
+        NodeDefinition node = instance.definition();
         if (node.slot().isPresent()) {
             return station.state().getItem(node.slot().get().slot());
         }
         if (node.output().isPresent()) {
             return station.state().getOutput(node.output().get().output());
         }
-        return ItemStack.EMPTY;
+        return instance.tooltipItem();
     }
 
     /** The inventory slot at a GUI position; -2 over the panel but not on a slot; -1 outside the panel. */

@@ -358,6 +358,7 @@ obj("slot", "SlotBinding", "A place for an item of a station slot; clicked like 
     "count_facing": field({"type": "string", "enum": ["up", "front", "camera"]},
                           "up: the count lies on the slot; front: it stands at the item's foot facing the front; camera: at the"
                           " item's foot, always turned to the camera like a name tag.", "up"),
+    "idle_highlight": field(num(0, 1), "How strongly the square shows while the cursor is elsewhere, 0..1 of the hovered one.", 0),
 }, required=["slot"])
 
 obj("output", "OutputBinding", "Shows a result the station logic computes; clicking takes it.", {
@@ -492,6 +493,9 @@ obj("interface", "InterfaceOptions", "How the interface behaves and looks; every
     "sounds": field(BOOL, "The library's quiet sounds for picking up, putting down and controls.", True),
     "hover_outline": field(BOOL, "Outline the usable object under the cursor.", True),
     "outline_color": field(COLOR, "Colour of that outline.", "#FFE6E6E6"),
+    "carry_count_facing": field({"type": "string", "enum": ["up", "front", "camera"]},
+                                "Which way the held stack's count faces: turned to the camera, lying flat or standing"
+                                " towards the front.", "camera"),
 })
 
 TYPES = {

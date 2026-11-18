@@ -184,7 +184,7 @@ public final class FocusController {
     public void goOver(ClientStation target, boolean awaitServer, float seconds) {
         LocalPlayer player = Minecraft.getInstance().player;
         boolean onward = isGoingOver();
-        if (player == null || phase != Phase.FOCUSED && !onward || station == null || lastPose == null) {
+        if (player == null || !canGoOver()) {
             return;
         }
         flightOnward = onward;
@@ -212,6 +212,14 @@ public final class FocusController {
         if (confirmed) {
             station.setFocusedInternal(true);
         }
+    }
+
+    /**
+     * Whether {@link #goOver} would go now: at a station or flying over already, with the camera posed once. Checked before
+     * anything is sent, so that a station left (its menu closed) is never one the camera stays at.
+     */
+    public boolean canGoOver() {
+        return (phase == Phase.FOCUSED || isGoingOver()) && station != null && lastPose != null;
     }
 
     /** How far the camera has flown over to a neighbouring station, eased, 0 to 1; 1 when it is not flying over. */

@@ -61,6 +61,7 @@ public final class NodeInstance implements NodeView {
     private int tint;
     private Visual visualOverride;
     private Component tooltipOverride;
+    private net.minecraft.world.item.ItemStack tooltipItem = net.minecraft.world.item.ItemStack.EMPTY;
     /** Degrees per second of a code spin, and the angle it reached. */
     private final Vector3f spinSpeed = new Vector3f();
     private final Vector3f spinAngle = new Vector3f();
@@ -272,6 +273,16 @@ public final class NodeInstance implements NodeView {
     @Override
     public void setTooltip(Component text) {
         tooltipOverride = text;
+    }
+
+    @Override
+    public void setTooltipItem(net.minecraft.world.item.ItemStack stack) {
+        tooltipItem = stack == null ? net.minecraft.world.item.ItemStack.EMPTY : stack;
+    }
+
+    /** The item whose tooltip shows over the node, set by code; empty: none. */
+    public net.minecraft.world.item.ItemStack tooltipItem() {
+        return tooltipItem;
     }
 
     /** The tooltip set by code, or null. */
