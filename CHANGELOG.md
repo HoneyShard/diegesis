@@ -6,25 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0-beta.13+1.20.1] - Unreleased
 ### Added
-- Slot option `idle_highlight`: the slot's square shows faintly while the cursor is elsewhere, so the places to put things
-  are seen at a glance.
-- `NodeView.setTooltipItem`: a node that draws an item itself (a result hovering over the work) shows its tooltip and takes
-  recipe viewers' keys, as a slot does.
+- Slot option `idle_highlight`: the slot's square shows faintly while the cursor is elsewhere.
+- `NodeView.setTooltipItem`: a node that draws an item itself shows its tooltip and takes recipe viewers' keys, as a slot does.
 - `DiegesisClient.items(buffers)`: buffers for an item a node painter draws, with depth and its enchantment glint.
-- Menu stations go over to neighbouring stations like any other: the movement and arrow keys and the cursor at the edge of
-  the screen now reach a furnace beside a crafting table, and a kitchen station beside either.
+- Menu stations go over to neighbouring stations: the movement keys and the screen edge reach a furnace beside a crafting table.
 - Interface option `carry_count_facing`: which way the count of the stack in the hand faces.
 ### Changed
 - The square under the cursor on an `upright` slot stands in the item's plane, behind it, no longer flat at its foot.
-- The count of the stack in the hand is turned to the camera, as the counts of slots that ask for it, no longer lying flat
-  (`"carry_count_facing": "up"` keeps the old look).
+- The count of the stack in the hand is turned to the camera (`"carry_count_facing": "up"` keeps the old look).
 ### Fixed
-- Enchanted items in a scene show their glint again: it was drawn before the items and hidden by the depth test.
-- Stack counts drawn on top are no longer cut by a block standing in front of them: a log in a furnace showed "4" for 54.
-- A multiblock station whose scene shows while nobody works at it is drawn once, at its main block: each of its other blocks
-  drew the scene too, out of place, while it was in use.
-- A block model lit as a block (`lit_as_block`) takes its light and corner shadows from the world block it stands in, no longer
-  always from the station's block: a multiblock's scene drawn block by block is shaded as the blocks it stands in for.
+- Enchanted items in a scene show their glint again.
+- Stack counts drawn on top are no longer cut by a block standing in front of them.
+- A multiblock station's scene shown at rest is drawn once, at its main block, no longer again at each of its other blocks.
+- A block model lit as a block takes its light from the world block it stands in, so a multiblock's scene is shaded block by block.
+- Stirring a shallow liquid no longer flattens its waves as if under a lid.
+- The game no longer crashes on start with [AsyncParticles](https://modrinth.com/mod/asyncparticles), and its GPU particles fade in front of a station.
+- Claim mods such as [Open Parties and Claims](https://modrinth.com/mod/open-parties-and-claims) and spawn protection keep a station closed to players who may not use the block.
+- No sliver of the hand stays in view at a station under an [Iris](https://modrinth.com/mod/iris) or [Oculus](https://modrinth.com/mod/oculus) shader pack.
+
+Thanks to LeDok for the AsyncParticles, claim and shader pack fixes ([#5](https://github.com/Pocky-l/diegesis/pull/5),
+[#6](https://github.com/Pocky-l/diegesis/pull/6), [#7](https://github.com/Pocky-l/diegesis/pull/7), [#8](https://github.com/Pocky-l/diegesis/pull/8)).
 
 ## [1.0.0-beta.12+1.20.1] - 2026-11-17
 ### Added
