@@ -118,7 +118,7 @@ public final class ClientStations {
             boolean near = player.distanceToSqr(SubLevels.center(level, station.pos(), true)) < KEEP_RANGE * KEEP_RANGE;
             boolean wanted = station.isFocused() || station.isInSession() || station.isIdleVisible() || station.holdsBlock()
                     // Still drawing the block until the chunk shows it again.
-                    || HiddenBlocks.isStoodIn(station.pos())
+                    || station.isBlockHidden()
                     // A menu station waits for its menu as the station the camera flies to: nothing else brings it back.
                     || station.type().authority() == com.pockyl.diegesis.api.station.Authority.MENU
                     && FocusController.get().station() == station;

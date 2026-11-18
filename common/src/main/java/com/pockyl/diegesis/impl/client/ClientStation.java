@@ -220,7 +220,23 @@ public final class ClientStation implements StationView, StationContext {
 
     @Override
     public boolean isBlockHidden() {
-        return type.hidesBlock() && HiddenBlocks.isStoodIn(pos);
+        if (!type.hidesBlock()) {
+            return false;
+        }
+        if (HiddenBlocks.isStoodIn(pos)) {
+            return true;
+        }
+        // A multiblock's scene stands in for every block of it until the last is drawn by the chunks again: they are built and put
+        // on screen apart, and a scene gone with its main block left the others missing for a few frames.
+        net.minecraft.client.multiplayer.ClientLevel level = net.minecraft.client.Minecraft.getInstance().level;
+        if (level != null) {
+            for (BlockPos other : type.hiddenBlocks(level, pos)) {
+                if (HiddenBlocks.isStoodIn(other)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @Override

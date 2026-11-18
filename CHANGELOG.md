@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stack counts drawn on top are no longer cut by a block standing in front of them.
 - A multiblock station's scene shown at rest is drawn once, at its main block, no longer again at each of its other blocks.
 - A block model lit as a block takes its light from the world block it stands in, so a multiblock's scene is shaded block by block.
+- A multiblock's scene stays until all its blocks are back, and its own blocks are never cleared from the camera's way: no holes as the camera flies in or out.
 - Stirring a shallow liquid no longer flattens its waves as if under a lid.
 
 ## [1.0.0-beta.12+1.21.1] - 2026-11-17
