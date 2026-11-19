@@ -96,6 +96,13 @@ public final class DiegesisRenderTypes {
             .setOutline(RenderSetup.OutlineProperty.AFFECTS_OUTLINE)
             .createRenderSetup());
 
+    static {
+        // A shader pack draws the game's entity pipelines with its own programs; these are those pipelines with a change or two.
+        ShaderPipelines.assign(LIGHT_POOL, "EMISSIVE_ENTITIES");
+        ShaderPipelines.assign(TRANSLUCENT_CULL_NO_DEPTH, "ENTITIES_TRANSLUCENT");
+        ShaderPipelines.assign(TRANSLUCENT_NO_DEPTH, "ENTITIES_TRANSLUCENT");
+    }
+
     private DiegesisRenderTypes() {
     }
 
