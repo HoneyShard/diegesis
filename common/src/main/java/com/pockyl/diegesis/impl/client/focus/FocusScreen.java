@@ -222,6 +222,9 @@ public final class FocusScreen extends Screen {
     protected void init() {
         layout();
         heldKeys.clear();
+        // Since Minecraft 26.x characters come only while text input is on, and the game turns it on for a focused text field
+        // alone. A station types without one (a recipe book's search): the screen holds text input for as long as it is open.
+        Minecraft.getInstance().onTextInputFocusChange(this, true);
         var options = Minecraft.getInstance().options;
         List<Integer> keys = new ArrayList<>(List.of(InputConstants.KEY_LEFT, InputConstants.KEY_RIGHT, InputConstants.KEY_UP, InputConstants.KEY_DOWN));
         for (var mapping : List.of(options.keyLeft, options.keyRight, options.keyUp, options.keyDown)) {
@@ -863,6 +866,7 @@ public final class FocusScreen extends Screen {
 
     @Override
     public void removed() {
+        Minecraft.getInstance().onTextInputFocusChange(this, false);
         SmoothPass.release();
         showOverlay(null);
         panelLeft = NO_PANEL;
