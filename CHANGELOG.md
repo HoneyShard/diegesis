@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - The network format changed: client and server need the same Diegesis.
 - `SceneEvent` gains new events in this version: a `switch` over it needs a `default` branch.
+### Fixed
+- A block whose use another mod answers with its own screen (Amendments' lectern editor for a book and quill) no longer
+  flies the camera back and slides the HUD in behind that screen: the station steps aside at once, and the block's next
+  uses go to that mod until the block changes.
 
 ## [1.0.0-beta.14+1.20.1] - 2026-11-20
 ### Added
