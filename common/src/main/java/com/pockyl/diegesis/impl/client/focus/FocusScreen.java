@@ -711,6 +711,11 @@ public final class FocusScreen extends Screen {
         return forceShift || hasShiftDown();
     }
 
+    /** Whether shift is held, also when a test driver holds it ({@link #forceShift}). */
+    public static boolean shiftDown() {
+        return shift();
+    }
+
     static boolean control() {
         return forceControl || hasControlDown();
     }

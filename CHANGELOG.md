@@ -4,6 +4,12 @@ All notable changes to this mod are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-beta.15+1.21.1] - 2026-11-20
+### Added
+- `Diegesis.addListener`: a mod can watch any station, its own or another mod's, hear what players do there and refuse it.
+- `DiegesisClient.addBehavior`: client code added to any station beside its own behaviour, for one station type or all of them.
+- `StationView.isShiftDown()`: whether shift is held, as the station's own clicks see it.
+
 ## [1.0.0-beta.14+1.21.1] - 2026-11-20
 ### Added
 - Orientation `PLAYER_FREE` and `StationView.turn()`: a station's scene faces the player at their own angle round the block.
