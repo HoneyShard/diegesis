@@ -9,14 +9,17 @@ import net.fabricmc.fabric.api.client.model.loading.v1.PreparableModelLoadingPlu
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.fabricmc.fabric.api.event.Event;
+import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.resource.IdentifiableResourceReloadListener;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.block.BlockModelShaper;
 import net.minecraft.client.resources.model.ModelResourceLocation;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.profiling.ProfilerFiller;
+import net.minecraft.world.InteractionResult;
 
 import com.pockyl.diegesis.api.station.StationType;
 import com.pockyl.diegesis.impl.StationRegistry;
@@ -38,6 +41,16 @@ public final class DiegesisFabricClient implements ClientModInitializer {
         DiegesisClientRuntime.init();
         FabricNetwork.registerClient();
         ClientTickEvents.END_CLIENT_TICK.register(client -> DiegesisClientRuntime.tick());
+        // A station opens in a phase after everybody's block use, so a mod that takes the click comes first.
+        ResourceLocation openStation = ResourceLocation.fromNamespaceAndPath("diegesis", "open_station");
+        UseBlockCallback.EVENT.addPhaseOrdering(Event.DEFAULT_PHASE, openStation);
+        UseBlockCallback.EVENT.register(openStation, (player, level, hand, hit) -> {
+            if (!level.isClientSide() || !(player instanceof LocalPlayer local)) {
+                return InteractionResult.PASS;
+            }
+            InteractionResult result = DiegesisClientRuntime.onUseBlock(local, hand, hit);
+            return result != null ? result : InteractionResult.PASS;
+        });
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, context) -> dispatcher.register(
                 ClientCommandManager.literal("diegesis").then(ClientCommandManager.literal("debug").executes(command -> {
                     DebugView.toggle();

@@ -17,6 +17,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
@@ -33,12 +34,15 @@ import java.util.WeakHashMap;
  *
  * <p>A model standing square to the world, as such a copy does, is drawn the way the chunks draw blocks, its faces turned to
  * the world's sides first so that each is lit from its own side. One turned some other way (a lid set aside, leaning) has no
- * corner shadows: each face takes the shade of the way it faces and the light in front of it.
+ * corner shadows: each face takes the shade of the way it faces and the light in front of it, where it stands now: a door
+ * swinging out of a cupboard is lit by the room its face looks into, not by the cupboard or the wall beside it.
  */
 final class BlockLit {
     private static final int STRIDE = DefaultVertexFormat.BLOCK.getVertexSize() / 4;
     private static final int NORMAL = 7;
     private static final float SQUARE = 0.9999F;
+    /** How far (blocks) in front of a turned face its light is taken: clear of the face, well short of the next block. */
+    private static final float IN_FRONT = 0.1F;
     /** The model turned by a quarter, a half and three quarters, made when first needed; dropped with the models. */
     private static final Map<BakedModel, BakedModel[]> TURNED = new WeakHashMap<>();
 
@@ -50,8 +54,10 @@ final class BlockLit {
      * type, lit as {@code state} at {@code pos} would be.
      *
      * @param toWorld the pose's turn into the world: the level's view turned back
+     * @param camera  where the pose's origin is in the world (the camera), or null: a turned face is then lit from {@code pos}
      */
-    static void draw(BakedModel model, BlockState state, BlockPos pos, PoseStack poseStack, VertexConsumer consumer, Matrix4f toWorld) {
+    static void draw(BakedModel model, BlockState state, BlockPos pos, PoseStack poseStack, VertexConsumer consumer, Matrix4f toWorld,
+            Vec3 camera) {
         Minecraft minecraft = Minecraft.getInstance();
         ClientLevel level = minecraft.level;
         if (level == null) {
@@ -82,12 +88,34 @@ final class BlockLit {
             for (BakedQuad quad : model.getQuads(state, side, random)) {
                 Vector3f normal = world.transformDirection(new Vector3f(quad.getDirection().step())).normalize();
                 float shade = quad.isShade() ? diffuse(normal) : 1.0F;
-                // The light of the block the face looks into, or of the station's own where that one is solid.
-                BlockPos lit = pos.relative(Direction.getNearest(normal.x, normal.y, normal.z));
-                int light = LevelRenderer.getLightColor(level, level.getBlockState(lit).isSolidRender(level, lit) ? pos : lit);
+                int light = faceLight(level, quad, world, camera, normal, pos);
                 consumer.putBulkData(poseStack.last(), quad, shade, shade, shade, 1.0F, light, OverlayTexture.NO_OVERLAY);
             }
         }
+    }
+
+    /**
+     * The light of a turned face: of the block just in front of its middle, where it stands now. Where that one is solid (no
+     * light inside), or the face's place is not known, the block {@code pos} looks into that way, or {@code pos} itself.
+     */
+    private static int faceLight(ClientLevel level, BakedQuad quad, Matrix4f world, Vec3 camera, Vector3f normal, BlockPos pos) {
+        if (camera != null) {
+            int[] data = quad.getVertices();
+            int vertices = data.length / STRIDE;
+            Vector3f middle = new Vector3f();
+            for (int vertex = 0; vertex < vertices; vertex++) {
+                int at = vertex * STRIDE;
+                middle.add(Float.intBitsToFloat(data[at]), Float.intBitsToFloat(data[at + 1]), Float.intBitsToFloat(data[at + 2]));
+            }
+            world.transformPosition(middle.div(Math.max(1, vertices)));
+            BlockPos front = BlockPos.containing(camera.x + middle.x + normal.x * IN_FRONT, camera.y + middle.y + normal.y * IN_FRONT,
+                    camera.z + middle.z + normal.z * IN_FRONT);
+            if (!level.getBlockState(front).isSolidRender(level, front)) {
+                return LevelRenderer.getLightColor(level, front);
+            }
+        }
+        BlockPos lit = pos.relative(Direction.getNearest(normal.x, normal.y, normal.z));
+        return LevelRenderer.getLightColor(level, level.getBlockState(lit).isSolidRender(level, lit) ? pos : lit);
     }
 
     private static final Direction[] SIDES = {Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST,
