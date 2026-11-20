@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Diegesis.addListener`: a mod can watch any station, its own or another mod's, hear what players do there and refuse it.
 - `DiegesisClient.addBehavior`: client code added to any station beside its own behaviour, for one station type or all of them.
 - `StationView.isShiftDown()`: whether shift is held, as the station's own clicks see it.
+- Effect files (`diegesis/effects/*.json`): particles, a sound, a flash of light, a shake, a node's emitter or ripples, played by id anywhere.
+- Particle style files (`diegesis/particles/*.json`), with every field of the builder.
+- Scene option `feedback.sounds`, and the same on a node: swap, change or silence each of the library's own sounds.
+- Scene option `feedback.reactions`: play an effect when something happens in the scene, written in the scene file alone.
+- `StationView.shareEffect` and shared reactions: an effect played on one client is seen by everyone near the station.
+- `StationListener.onEffect` hears every effect played at a station.
+### Changed
+- The network format changed: client and server need the same Diegesis.
+- `SceneEvent` gains new events in this version: a `switch` over it needs a `default` branch.
 
 ## [1.0.0-beta.14+1.20.1] - 2026-11-20
 ### Added

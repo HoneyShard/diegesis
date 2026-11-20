@@ -433,7 +433,7 @@ public final class FocusInput {
             startControl(station, node, definition.control().get(), x, y);
         } else if (definition.grabbable().isPresent()) {
             gesture = new NodeGrab(station, node, definition.grabbable().get(), x, y);
-            UiSounds.grab(node.worldPosition());
+            UiSounds.grab(node.id(), node.worldPosition());
             station.onEvent(new SceneEvent.Grab(node.id()));
         } else if (definition.strokes()) {
             gesture = new Stroke(station, node, button, false);
@@ -1031,7 +1031,7 @@ public final class FocusInput {
         } else {
             return false;
         }
-        UiSounds.detent(station.pos().getCenter(), 0.5F);
+        UiSounds.detent(null, station.pos().getCenter(), 0.5F);
         return true;
     }
 
@@ -1388,7 +1388,7 @@ public final class FocusInput {
         switch (control.type()) {
             case BUTTON -> {
                 node.pulse();
-                UiSounds.button(node.worldPosition());
+                UiSounds.button(node.id(), node.worldPosition());
                 if (spec.isButton()) {
                     station.perform(new StationAction.Press(control.control()));
                 }
@@ -1399,7 +1399,7 @@ public final class FocusInput {
                     float current = station.state().getControl(control.control());
                     float next = spec.fraction(current) < 0.5F ? spec.max() : spec.min();
                     setControl(station, node, control, spec, next, true);
-                    UiSounds.toggle(node.worldPosition(), next > current);
+                    UiSounds.toggle(node.id(), node.worldPosition(), next > current);
                 }
             }
             case KNOB, SLIDER -> {
@@ -1422,7 +1422,7 @@ public final class FocusInput {
             station.state().setControl(control.control(), sanitized);
         }
         if (spec.steps() > 0 && control.type() == ControlBinding.Type.KNOB) {
-            UiSounds.detent(node.worldPosition(), spec.fraction(sanitized));
+            UiSounds.detent(node.id(), node.worldPosition(), spec.fraction(sanitized));
         }
         station.onEvent(new SceneEvent.ControlMoved(control.control(), sanitized));
     }
@@ -1632,7 +1632,7 @@ public final class FocusInput {
             if (!moving && Math.hypot(x - startX, y - startY) >= START) {
                 moving = true;
                 station.scene().physics().hold(index());
-                UiSounds.grab(node.worldPosition());
+                UiSounds.grab(node.id(), node.worldPosition());
             }
         }
 
@@ -2079,7 +2079,7 @@ public final class FocusInput {
             soundClock -= dt;
             if (soundClock <= 0.0F) {
                 soundClock = 0.45F;
-                UiSounds.pour(target.worldPosition(), flow, target.liquid().fraction());
+                UiSounds.pour(node.id(), target.worldPosition(), flow, target.liquid().fraction());
             }
         }
 
@@ -2325,7 +2325,7 @@ public final class FocusInput {
             String target = hovered != null && hovered != node ? hovered.id() : null;
             letGo();
             node.release(grabbable.stay());
-            UiSounds.setDown(node.worldPosition());
+            UiSounds.setDown(node.id(), node.worldPosition());
             station.onEvent(new SceneEvent.Release(node.id(), target));
         }
 
