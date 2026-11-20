@@ -35,6 +35,18 @@ abstract class GuiMixin {
         }
     }
 
+    /**
+     * What covers the whole screen (the vignette, a pumpkin's view, frost, the portal's swirl) is drawn even with the HUD hidden:
+     * it goes with the HUD only when the scene does not keep the vignette.
+     */
+    @Inject(method = {"renderVignette", "renderSpyglassOverlay", "renderTextureOverlay", "renderPortalOverlay"}, at = @At("HEAD"),
+            cancellable = true, require = 0)
+    private void diegesis$screenOverlay(CallbackInfo ci) {
+        if (diegesis$hides() && HudSlide.gone() && !FocusController.get().keepsVignette()) {
+            ci.cancel();
+        }
+    }
+
     @Inject(method = "renderHotbar", at = @At("HEAD"), cancellable = true, require = 0)
     private void diegesis$hotbar(CallbackInfo ci) {
         diegesis$begin(HudSlide.HOTBAR, ci);

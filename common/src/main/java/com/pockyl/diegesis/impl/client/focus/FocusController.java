@@ -327,6 +327,11 @@ public final class FocusController {
         return options().hideHud() && hud().slide();
     }
 
+    /** Whether the station's scene keeps what covers the whole screen (the vignette) while the HUD is gone. */
+    public boolean keepsVignette() {
+        return hud().keepVignette();
+    }
+
     private HudOptions hud() {
         return station == null || station.scene() == null ? HudOptions.DEFAULT : station.scene().definition().hud();
     }

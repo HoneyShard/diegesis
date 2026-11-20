@@ -6,6 +6,7 @@
   "refmap": "diegesis.refmap.json",
   "mixins": [],
   "client": [
+    "client.BlockEntityRenderDispatcherMixin",
     "client.BlockFaceMixin",
     "client.CameraMixin",
     "client.ChatComponentMixin",

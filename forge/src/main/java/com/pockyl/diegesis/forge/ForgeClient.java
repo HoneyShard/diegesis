@@ -1,8 +1,10 @@
 package com.pockyl.diegesis.forge;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.commands.Commands;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.InteractionResult;
 import net.minecraftforge.client.event.ModelEvent;
 import net.minecraftforge.client.event.RegisterClientCommandsEvent;
 import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
@@ -12,6 +14,8 @@ import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.client.gui.overlay.VanillaGuiOverlay;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
+import net.minecraftforge.eventbus.api.Event;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.IEventBus;
 
@@ -30,6 +34,10 @@ final class ForgeClient {
     /** The overlays this frame begun to slide and not yet ended, and whether what mods draw after the HUD is. */
     private static final Set<ResourceLocation> slid = new HashSet<>();
     private static boolean slidAfter;
+    /** The game's overlays over the whole screen: they stay while the scene keeps the vignette, even before they were measured. */
+    private static final Set<ResourceLocation> SCREEN_OVERLAYS = Set.of(VanillaGuiOverlay.VIGNETTE.id(),
+            VanillaGuiOverlay.SPYGLASS.id(), VanillaGuiOverlay.HELMET.id(), VanillaGuiOverlay.FROSTBITE.id(),
+            VanillaGuiOverlay.PORTAL.id());
 
     private ForgeClient() {
     }
@@ -54,6 +62,18 @@ final class ForgeClient {
                     DebugView.toggle();
                     return 1;
                 }))));
+        // A station opens from the last listener of the block use, so a mod that takes the click comes first.
+        MinecraftForge.EVENT_BUS.addListener(EventPriority.LOWEST, (PlayerInteractEvent.RightClickBlock event) -> {
+            if (!(event.getEntity() instanceof LocalPlayer player) || !event.getLevel().isClientSide()
+                    || event.getUseBlock() == Event.Result.DENY) {
+                return;
+            }
+            InteractionResult result = DiegesisClientRuntime.onUseBlock(player, event.getHand(), event.getHitVec());
+            if (result != null) {
+                event.setCancellationResult(result);
+                event.setCanceled(true);
+            }
+        });
         MinecraftForge.EVENT_BUS.addListener((TickEvent.ClientTickEvent event) -> {
             if (event.phase == TickEvent.Phase.END) {
                 DiegesisClientRuntime.tick();
@@ -67,8 +87,11 @@ final class ForgeClient {
             ResourceLocation id = event.getOverlay().id();
             boolean chat = id.equals(VanillaGuiOverlay.CHAT_PANEL.id());
             boolean hides = focus.isActive() && focus.options().hideHud() && !chat;
-            // The crosshair is where the player aims, and the player no longer aims.
-            if (hides && (HudSlide.gone() || id.equals(VanillaGuiOverlay.CROSSHAIR.id()))) {
+            // The crosshair is where the player aims, and the player no longer aims. What covers the whole screen is no part of
+            // the HUD: it stays while the scene keeps the vignette.
+            boolean stays = hides && focus.keepsVignette() && (SCREEN_OVERLAYS.contains(id) || HudSlide.coversScreen(id.toString(),
+                    event.getWindow().getGuiScaledWidth(), event.getWindow().getGuiScaledHeight()));
+            if (hides && (id.equals(VanillaGuiOverlay.CROSSHAIR.id()) || HudSlide.gone() && !stays)) {
                 event.setCanceled(true);
                 return;
             }
