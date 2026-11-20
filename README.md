@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://www.curseforge.com/minecraft/mc-mods/diegesis"><img alt="CurseForge downloads" src="https://img.shields.io/curseforge/dt/1790227?logo=curseforge&label=CurseForge&color=F16436"></a>
-  <a href="https://www.curseforge.com/minecraft/mc-mods/diegesis/files"><img alt="Minecraft 1.20.1 and 1.21.1" src="https://img.shields.io/badge/Minecraft-1.20.1%20%7C%201.21.1-62B47A"></a>
+  <a href="https://www.curseforge.com/minecraft/mc-mods/diegesis/files"><img alt="Minecraft 1.20.1, 1.21.1 and 26.3" src="https://img.shields.io/badge/Minecraft-1.20.1%20%7C%201.21.1%20%7C%2026.3-62B47A"></a>
   <a href="https://files.minecraftforge.net"><img alt="Forge" src="https://img.shields.io/badge/Loader-Forge-DFA86A"></a>
   <a href="https://neoforged.net"><img alt="NeoForge" src="https://img.shields.io/badge/Loader-NeoForge-D7742F"></a>
   <a href="https://fabricmc.net"><img alt="Fabric" src="https://img.shields.io/badge/Loader-Fabric-C6BBA5"></a>
@@ -159,7 +159,8 @@ Discord server.
 ## Installation
 
 1. Install [Forge](https://files.minecraftforge.net) for Minecraft 1.20.1, [NeoForge](https://neoforged.net) for 1.21.1, or
-   [Fabric](https://fabricmc.net) (with [Fabric API](https://www.curseforge.com/minecraft/mc-mods/fabric-api)) for either.
+   [Fabric](https://fabricmc.net) (with [Fabric API](https://www.curseforge.com/minecraft/mc-mods/fabric-api)) for 1.20.1,
+   1.21.1 or 26.3.
 2. Put the jar into the `mods` folder of the client, and of the server for server stations. Client and server need the
    same version of Diegesis.
 
