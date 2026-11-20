@@ -49,8 +49,9 @@ Made something with Diegesis? Open an issue and it will be listed here.
   slots. The inventory stays at the bottom of the screen, slides in as a drawer or is laid out in the scene.
 - ✋ **Carried objects** - the player picks objects up and moves them over the block. They lag slightly behind the
   cursor, lean and cast a shadow.
-- 🫙 **Free placing** - items are put down anywhere on a station's shelves, turned and sized by hand. With physics on
-  they fall, tip over and push each other, and lanterns among them light the shelves.
+- 🫙 **Free placing** - items are put down anywhere on a station's shelves, turned and sized by hand, stacked into piles
+  that move as one, flat things standing or lying. With physics on they fall, tip over and push each other, land with
+  their own sound, and lanterns among them light the shelves.
 - 🎛️ **Controls** - toggles, buttons, knobs and sliders. A lever, a switch, a button, a knob and a slider come ready to
   use with one line in a scene.
 - 💧 **Liquids and pouring** - tanks hold real amounts of liquid that sway and ripple. Point a vessel at a tank to pour
@@ -118,6 +119,13 @@ Interface options (all optional, defaults shown):
 ```
 
 Add `"carry_margin": 6` to keep carried things within 6 pixels of the block's sides (no limit by default).
+
+The HUD slides away while the player works and comes back after (all optional, defaults shown); the vignette and other
+whole-screen overlays stay unless `keep_vignette` is `false`:
+
+```json
+"hud": {"slide": true, "seconds": 0.3, "keep_vignette": true}
+```
 
 The inventory can live in the scene instead of the screen panel:
 `"inventory": {"pos": [8, 15.2, -5.4], "rotation": [-18, 0, 0], "spacing": 2.2, "size": 1.75, "slot_color": "#66000000"}`
