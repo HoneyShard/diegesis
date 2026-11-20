@@ -77,6 +77,17 @@ public final class SceneRenderer {
     private static final double RENDER_RANGE = 40.0;
     /** Shadows and highlights: block-atlas geometry, see-through, back faces culled (no double layers in a shadow). */
     private static final RenderType OVERLAY = net.minecraft.client.renderer.rendertype.RenderTypes.entityTranslucentCull(TextureAtlas.LOCATION_BLOCKS);
+    /**
+     * Shadows of item-atlas geometry. Since Minecraft 26.x items have an atlas of their own: drawn into {@link #OVERLAY}, an item's
+     * shape was read from the block atlas and its shadow came out as a dark rectangle.
+     */
+    private static final RenderType ITEM_OVERLAY = net.minecraft.client.renderer.rendertype.RenderTypes.entityTranslucentCull(TextureAtlas.LOCATION_ITEMS);
+    /** The render types that draw from the item atlas: the game's item sheets and the entity types {@code SceneDraw.sheet} gives. */
+    private static final java.util.Set<RenderType> ITEM_ATLAS_TYPES = java.util.Set.of(Sheets.cutoutItemSheet(),
+            Sheets.cutoutItemGlintSheet(), Sheets.cutoutItemGlintSpecialSheet(), Sheets.translucentItemSheet(),
+            Sheets.translucentItemGlintSheet(), Sheets.translucentItemGlintSpecialSheet(),
+            net.minecraft.client.renderer.rendertype.RenderTypes.entityCutout(TextureAtlas.LOCATION_ITEMS),
+            net.minecraft.client.renderer.rendertype.RenderTypes.entityTranslucentCull(TextureAtlas.LOCATION_ITEMS));
     /** Everything see-through of the scene goes here, in a buffer of its own: it stays one sorted batch. */
     private static final RenderType CLEAR = DiegesisRenderTypes.clearBlockSheet();
     /** Pixels between an item's right side and its count. */
@@ -236,6 +247,7 @@ public final class SceneRenderer {
         // shadows lie on them and must not hide them from the depth test. Then what is see-through, which nothing drawn later may
         // cross; particles last, so that a thick liquid does not bury them.
         SCENE_BUFFERS.submit(collector.order(ORDER_OVERLAY), OVERLAY);
+        SCENE_BUFFERS.submit(collector.order(ORDER_OVERLAY), ITEM_OVERLAY);
         SCENE_BUFFERS.submit(collector.order(ORDER_ITEMS), ITEMS);
         for (RenderType type : ITEM_TYPES) {
             SCENE_BUFFERS.submit(collector.order(ORDER_ITEMS), type);
@@ -1397,7 +1409,7 @@ public final class SceneRenderer {
         }
     }
 
-    /** Sends everything drawn through it into one see-through black layer: the shadow of whatever is drawn. */
+    /** Sends everything drawn through it into a see-through black layer of its atlas: the shadow of whatever is drawn. */
     private static final class ShadowBuffers implements SceneBuffers {
         private static float alpha = 0.5F;
         /** The direction to the light, in the space of the normals drawn into the shadow. */
@@ -1410,11 +1422,12 @@ public final class SceneRenderer {
 
         @Override
         public VertexConsumer getBuffer(RenderType type) {
-            if (type != OVERLAY) {
+            RenderType shadow = ITEM_ATLAS_TYPES.contains(type) ? ITEM_OVERLAY : OVERLAY;
+            if (type != shadow) {
                 KeptTypes.keep(buffers, type);
             }
             int a = Math.round(alpha * 255.0F);
-            return new LitFaces(new TintedConsumer(buffers.getBuffer(OVERLAY), a << 24), light);
+            return new LitFaces(new TintedConsumer(buffers.getBuffer(shadow), a << 24), light);
         }
     }
 }

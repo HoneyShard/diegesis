@@ -1,18 +1,20 @@
 package com.pockyl.diegesis.mixin.client;
 
 import net.minecraft.client.Camera;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.world.phys.Vec3;
+import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import com.pockyl.diegesis.impl.client.focus.FocusController;
 
 /**
- * Moves the camera to the station while the player works at it, and gives it the station's field of view. Neither loader has a
+ * Moves the camera to the station while the player works at it, and gives it the station's field of view, both after vanilla
+ * and other mods had their say. Neither loader has a
  * camera position event (NeoForge's ViewportEvent only turns the camera). Since Minecraft 26.x the camera is placed once a frame by
  * {@code alignWithEntity}, before the frame's culling is worked out from it. Runs after vanilla and other mods placed the camera, and only while
  * focused, so third-person and camera mods keep working the rest of the time. Its priority makes it the last hook at the
@@ -26,6 +28,9 @@ abstract class CameraMixin {
 
     @Shadow
     private boolean detached;
+
+    @Shadow
+    private float fov;
 
     @Shadow
     protected abstract void setPosition(Vec3 pos);
@@ -62,11 +67,18 @@ abstract class CameraMixin {
         detached = !focus.options().hidePlayer() && (detachedView || pose.position().distanceToSqr(eye) > BODY_CLEARANCE * BODY_CLEARANCE);
     }
 
-    @Inject(method = "calculateFov", at = @At("RETURN"), cancellable = true)
-    private void diegesis$focusFov(float partialTicks, CallbackInfoReturnable<Float> cir) {
+    /**
+     * The station's field of view, set where the camera stores the one it worked out, before the frame's culling and projection
+     * are made from it. A hook on what {@code calculateFov} returns was not enough: FOV and zoom mods change that value too, and
+     * whichever ran last decided, so at a station the player's FOV setting could come back (90 showed the station far away).
+     * What the game and those mods worked out is the player's own view, where flights start and end.
+     */
+    @Inject(method = "update", at = @At(value = "FIELD", target = "Lnet/minecraft/client/Camera;fov:F", opcode = Opcodes.PUTFIELD,
+            shift = At.Shift.AFTER))
+    private void diegesis$focusFov(DeltaTracker deltaTracker, CallbackInfo ci) {
         FocusController focus = FocusController.get();
         if (focus.isActive()) {
-            cir.setReturnValue((float) focus.fov(cir.getReturnValueF()));
+            fov = (float) focus.fov(fov);
         }
     }
 }
