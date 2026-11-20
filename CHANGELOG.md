@@ -4,7 +4,7 @@ All notable changes to this mod are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0-beta.14+1.20.1] - Unreleased
+## [1.0.0-beta.14+1.20.1] - 2026-11-20
 ### Added
 - Orientation `PLAYER_FREE` and `StationView.turn()`: a station's scene faces the player at their own angle round the block.
 - Slot options `ghost`, `ghost_alpha`, `ghost_period` and `NodeView.setGhostItems`: an empty slot shows what goes into it, see-through.
