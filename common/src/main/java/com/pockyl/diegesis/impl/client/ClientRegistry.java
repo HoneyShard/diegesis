@@ -18,6 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @SuppressWarnings("removal")
 public final class ClientRegistry {
     private static final Map<ResourceLocation, StationBehavior.Factory> BEHAVIORS = new ConcurrentHashMap<>();
+    private static final Map<ResourceLocation, java.util.List<StationBehavior.Factory>> EXTRA_BEHAVIORS = new ConcurrentHashMap<>();
+    private static final java.util.List<StationBehavior.Factory> EXTRA_FOR_ALL = new java.util.concurrent.CopyOnWriteArrayList<>();
     private static final Map<ResourceLocation, SceneDefinition> SCENES = new ConcurrentHashMap<>();
     private static final Set<ResourceLocation> MODELS = ConcurrentHashMap.newKeySet();
     private static final Map<ResourceLocation, EffectHandler> EFFECTS = new ConcurrentHashMap<>();
@@ -85,6 +87,29 @@ public final class ClientRegistry {
         if (BEHAVIORS.putIfAbsent(station, factory) != null) {
             throw new IllegalStateException("Station " + station + " already has a behaviour");
         }
+    }
+
+    /** A behaviour added beside a station's own: for one station type, or for all with {@code station} null. */
+    public static void addBehavior(ResourceLocation station, StationBehavior.Factory factory) {
+        if (station == null) {
+            EXTRA_FOR_ALL.add(factory);
+        } else {
+            EXTRA_BEHAVIORS.computeIfAbsent(station, key -> new java.util.concurrent.CopyOnWriteArrayList<>()).add(factory);
+        }
+    }
+
+    /** The behaviours added to a station type, its own ones first, then those for every station. */
+    public static java.util.List<StationBehavior.Factory> extraBehaviors(ResourceLocation station) {
+        java.util.List<StationBehavior.Factory> own = EXTRA_BEHAVIORS.get(station);
+        if ((own == null || own.isEmpty()) && EXTRA_FOR_ALL.isEmpty()) {
+            return java.util.List.of();
+        }
+        java.util.List<StationBehavior.Factory> all = new java.util.ArrayList<>();
+        if (own != null) {
+            all.addAll(own);
+        }
+        all.addAll(EXTRA_FOR_ALL);
+        return all;
     }
 
     public static void registerScene(ResourceLocation id, SceneDefinition scene) {
