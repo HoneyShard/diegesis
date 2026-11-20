@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scene option `feedback.reactions`: play an effect when something happens in the scene, written in the scene file alone.
 - `StationView.shareEffect` and shared reactions: an effect played on one client is seen by everyone near the station.
 - `StationListener.onEffect` hears every effect played at a station.
+- Scene events `Impact`, `Landed` and `FellOff` from the placing physics, `StreamLanded` where a stream of liquid lands, and `Submerge` when a carried thing goes under a liquid.
+- Scene option `feedback.impact_min_speed`: how hard placed things must knock together to count.
 ### Changed
 - The network format changed: client and server need the same Diegesis.
 - `SceneEvent` gains new events in this version: a `switch` over it needs a `default` branch.
