@@ -4,6 +4,33 @@ All notable changes to this mod are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-beta.14+1.21.1] - Unreleased
+### Added
+- Orientation `PLAYER_FREE` and `StationView.turn()`: a station's scene faces the player at their own angle round the block.
+- Slot options `ghost`, `ghost_alpha`, `ghost_period` and `NodeView.setGhostItems`: an empty slot shows what goes into it, see-through.
+- Free placing option `right_puts_one` (on by default): a right click puts one of the stack in the hand down, as in a chest.
+- Surface option `fill: "middle"` sets out shift-clicked things from the middle of the surface, as on a plate.
+- Surface option `flat_rest: "lie"` lays flat things on their back, for drawers and boxes seen from above.
+- Scene option `hud.keep_vignette`: `false` lets the vignette and other whole-screen overlays go with the HUD.
+- New `stack_*`, `turn_detent*`, `pick_min`, `grip_blend` and `physics.*` placing options bring back the old behaviour where wanted.
+### Changed
+- Free placing is calmer: piles move as one, things stack where the cursor points and never pass through each other.
+- A placed item is picked by its pixels, stays under the cursor when dragged and goes back where it stood when put again.
+- With physics, flat things turn to any angle and rest as they fall: standing, lying flat or leaning on a neighbour.
+- With physics, a put-down sounds as it lands, a shadow marks where it will land and other players see a long drag as it goes.
+- An item put on another shrinks at most a quarter to fit, and a turn by hand let go of near square settles onto it.
+- `ItemPose` has a `wanted` size. The network format of poses changed: client and server need the same Diegesis.
+- The vignette, frost, a carved pumpkin's view and the portal's swirl no longer vanish at a station.
+### Fixed
+- Tools that take a right click on a block, such as [Create Aeronautics](https://modrinth.com/mod/create-aeronautics)' honey glue or a wrench, now work on station blocks.
+- A menu station used from the edge of reach no longer opens the block's vanilla screen.
+- A menu station left and used again at once no longer opens with its menu shut on the server.
+- A block taken out of the camera's way takes along what stands on it and what its block entity draws.
+- `DiegesisClient.tinted` fades items drawn as entity models too, so a ghost banner is see-through.
+- A door or lid lit as a block no longer flickers as the camera moves, and a swinging door is lit by the room it faces.
+- With physics, placed things no longer jump back, jitter in stacks or start moving again when the station changes.
+- With physics, a box pushed part way over an open edge sits flat until it passes its balance point.
+
 ## [1.0.0-beta.13+1.21.1] - 2026-11-18
 ### Added
 - Slot option `idle_highlight`: the slot's square shows faintly while the cursor is elsewhere.
