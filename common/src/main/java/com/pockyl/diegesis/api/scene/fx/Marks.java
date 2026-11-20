@@ -25,4 +25,20 @@ public final class Marks {
 
     private Marks() {
     }
+
+    /**
+     * The marks of a node holding {@code contents} in its tank (empty contents, or none for a node without a tank): its own,
+     * and {@link #WET} with each liquid's id while it holds any.
+     */
+    public static java.util.Set<ResourceLocation> of(com.pockyl.diegesis.api.scene.NodeDefinition node,
+            com.pockyl.diegesis.api.state.TankContents contents) {
+        java.util.List<ResourceLocation> own = node.feedback().marks();
+        if (node.tank().isEmpty() || contents == null || contents.isEmpty()) {
+            return own.isEmpty() ? java.util.Set.of() : java.util.Set.copyOf(own);
+        }
+        java.util.Set<ResourceLocation> marks = new java.util.LinkedHashSet<>(own);
+        marks.add(WET);
+        contents.portions().forEach(portion -> marks.add(portion.liquid()));
+        return marks;
+    }
 }

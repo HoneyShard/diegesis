@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `StationListener.onEffect` hears every effect played at a station.
 - Scene events `Impact`, `Landed` and `FellOff` from the placing physics, `StreamLanded` where a stream of liquid lands, and `Submerge` when a carried thing goes under a liquid.
 - Scene option `feedback.impact_min_speed`: how hard placed things must knock together to count.
+- Node option `feedback.marks` (`diegesis:fire`, `diegesis:wet`, any id) and the events `Exposed` and `ItemContact`: a carried thing or the stack in the hand held into a flame or a liquid is reported, and the station's logic decides what it does. A tank with liquid is wet by itself.
 ### Changed
 - The network format changed: client and server need the same Diegesis.
 - `SceneEvent` gains new events in this version: a `switch` over it needs a `default` branch.
