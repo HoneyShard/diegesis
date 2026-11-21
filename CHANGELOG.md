@@ -17,15 +17,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `StationListener.onEffect` hears every effect played at a station.
 - Scene events `Impact`, `Landed` and `FellOff` from the placing physics, `StreamLanded` where a stream of liquid lands, and `Submerge` when a carried thing goes under a liquid.
 - Scene option `feedback.impact_min_speed`: how hard placed things must knock together to count.
-- Scene option `clear_view.surface`: `placing` keeps the scene's placing surfaces in view instead of the block's middle, so a drawer pulled out before its block no longer hides the block on top of it.
-- Node option `feedback.marks` (`diegesis:fire`, `diegesis:wet`, any id) and the events `Exposed` and `ItemContact`: a carried thing or the stack in the hand held into a flame or a liquid is reported, and the station's logic decides what it does. A tank with liquid is wet by itself.
+- Scene option `clear_view.surface: "placing"` keeps the placing surfaces in view, so an open drawer no longer hides the block on top of it.
+- Node option `feedback.marks` and the events `Exposed` and `ItemContact`: a carried thing or the held stack put into fire or liquid is reported.
+- Scene options `placing.physics.push_out`, `wake` and `fall_ease`.
 ### Changed
 - The network format changed: client and server need the same Diegesis.
 - `SceneEvent` gains new events in this version: a `switch` over it needs a `default` branch.
+- Placed things fall at real speed: `placing.physics.gravity` is 157 by default, `200` gives the old fall.
+- Heaps of placed things come to rest and stay there: no more jumping, spinning or creeping, and things put inside each other glide apart.
+- Putting a thing down or taking one wakes only what it touches (`wake: near`); `wake: all` keeps the old way.
+- A pile rides its base when the hand moves the base; when the base only settles or is knocked, what stands on it comes to
+  rest by the physics instead of being carried into its neighbours.
 ### Fixed
-- A block whose use another mod answers with its own screen (Amendments' lectern editor for a book and quill) no longer
-  flies the camera back and slides the HUD in behind that screen: the station steps aside at once, and the block's next
-  uses go to that mod until the block changes.
+- A block that another mod opens its own screen for (Amendments' lectern) no longer flies the camera back behind that screen.
 
 ## [1.0.0-beta.14+1.21.1] - 2026-11-20
 ### Added
