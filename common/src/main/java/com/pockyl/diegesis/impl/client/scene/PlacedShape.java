@@ -124,10 +124,11 @@ public final class PlacedShape {
         if (!framePose && gui3d) {
             TrackingItemStackRenderState modelled = new TrackingItemStackRenderState();
             Minecraft.getInstance().getItemModelResolver().updateForTopItem(modelled, stack, ItemDisplayContext.NONE, level, null, 0);
-            return MODELLED.computeIfAbsent(List.copyOf((List<?>) modelled.getModelIdentity()), key -> new PlacedShape(null, null,
+            // An ArrayList, not List.copyOf: another mod's item model may add a null to the identity.
+            return MODELLED.computeIfAbsent(new ArrayList<>((List<?>) modelled.getModelIdentity()), key -> new PlacedShape(null, null,
                     itemBox(measure(stack, ItemDisplayContext.NONE, level), false), light, flame, ItemDisplayContext.NONE));
         }
-        return CACHE.computeIfAbsent(List.copyOf((List<?>) icon.getModelIdentity()), key -> {
+        return CACHE.computeIfAbsent(new ArrayList<>((List<?>) icon.getModelIdentity()), key -> {
             List<float[]> quads = measure(stack, ItemDisplayContext.FIXED, level);
             // A flat item's two big quads span the whole icon; the strips along its pixels' edges say what is really there.
             Box3 box = itemBox(quads, !gui3d);
