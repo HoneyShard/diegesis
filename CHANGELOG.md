@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.0.0-beta.16+1.20.1] - 2026-11-22
+### Changed
+- Stations away from the player cost far less: scenes out of view are not drawn and move in coarser steps, and far liquids are drawn in less detail.
+- A town full of cooking pots costs about half as much again: floating things are drawn with fewer corners, and far stations in view move in steps of a thirtieth of a second.
 ### Fixed
 - Closing a screen another mod opened over a station, such as a [QuestLog](https://modrinth.com/mod/questlog) quest popup, no longer leaves the player unable to move or open the menu.
 
