@@ -189,7 +189,7 @@ public final class FocusScreen extends Screen {
     public static ItemStack hoveredStack() {
         LocalPlayer player = Minecraft.getInstance().player;
         ClientStation station = FocusController.get().station();
-        if (player == null || station == null || !(Minecraft.getInstance().gui.screen() instanceof FocusScreen)) {
+        if (player == null || station == null || !(Minecraft.getInstance().screen instanceof FocusScreen)) {
             return ItemStack.EMPTY;
         }
         FocusInput input = FocusInput.get();
@@ -229,12 +229,12 @@ public final class FocusScreen extends Screen {
         List<Integer> keys = new ArrayList<>(List.of(InputConstants.KEY_LEFT, InputConstants.KEY_RIGHT, InputConstants.KEY_UP, InputConstants.KEY_DOWN));
         for (var mapping : List.of(options.keyLeft, options.keyRight, options.keyUp, options.keyDown)) {
             InputConstants.Key bound = InputConstants.getKey(mapping.saveString());
-            if (bound.getType() == InputConstants.Type.KEYBOARD && bound.getValue() != InputConstants.UNKNOWN.getValue()) {
+            if (bound.getType() == InputConstants.Type.KEYSYM && bound.getValue() != InputConstants.UNKNOWN.getValue()) {
                 keys.add(bound.getValue());
             }
         }
         for (int key : keys) {
-            if (InputConstants.isKeyDown(key)) {
+            if (InputConstants.isKeyDown(Minecraft.getInstance().getWindow(), key)) {
                 heldKeys.add(key);
             }
         }
@@ -797,7 +797,7 @@ public final class FocusScreen extends Screen {
         }
         // The station's own keys come first (a field it types into), then the library's.
         ClientStation keyed = FocusController.get().station();
-        if (overlay == null && keyed != null && keyed.key(keyCode, event.keycode(), event.modifiers())) {
+        if (overlay == null && keyed != null && keyed.key(keyCode, event.scancode(), event.modifiers())) {
             return true;
         }
         if (inventoryKey) {
@@ -863,7 +863,7 @@ public final class FocusScreen extends Screen {
             FocusController.get().requestExit();
         } else {
             // No station behind this screen any more (another mod's screen gave it back): it just closes.
-            Minecraft.getInstance().gui.setScreen(null);
+            Minecraft.getInstance().setScreen(null);
         }
     }
 

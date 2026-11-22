@@ -124,10 +124,6 @@ final class LitFaces implements VertexConsumer {
         return this;
     }
 
-    @Override
-    public VertexConsumer setUv3(float u, float v) {
-        return this;
-    }
 
     @Override
     public VertexConsumer setNormal(float x, float y, float z) {

@@ -90,12 +90,12 @@ final class BlockLit {
                 for (BakedQuad quad : part.getQuads(side)) {
                     Vector3f normal = world.transformDirection(new Vector3f(quad.direction().getUnitVec3f())).normalize();
                     // A face that is not shaded by the way it faces (shade: false) is shaded as one facing up.
-                    Direction shadeOverride = quad.materialInfo().shadeDirectionOverride();
+                    Direction shadeOverride = quad.materialInfo().shade() ? null : Direction.UP;
                     float shade = diffuse(shadeOverride == null ? normal
                             : world.transformDirection(new Vector3f(shadeOverride.getUnitVec3f())).normalize());
                     // The light of the block the face looks into, or of the station's own where that one is solid.
                     BlockPos lit = pos.relative(Direction.getApproximateNearest(normal.x, normal.y, normal.z));
-                    instance.setLightCoords(LightCoordsUtil.getLightCoords(level, level.getBlockState(lit).isSolidRender() ? pos : lit));
+                    instance.setLightCoords(net.minecraft.client.renderer.LevelRenderer.getLightCoords(level, level.getBlockState(lit).isSolidRender() ? pos : lit));
                     int grey = Math.round(shade * 255.0F);
                     instance.setColor(0xFF000000 | grey << 16 | grey << 8 | grey);
                     consumer.putBakedQuad(poseStack.last(), quad, instance);

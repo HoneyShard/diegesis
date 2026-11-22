@@ -67,7 +67,7 @@ public final class SceneDraw {
         if (atlas.equals(net.minecraft.client.renderer.texture.TextureAtlas.LOCATION_BLOCKS)) {
             return translucent ? DiegesisRenderTypes.translucentCullBlockSheet() : DiegesisRenderTypes.cutoutBlockSheet();
         }
-        return translucent ? net.minecraft.client.renderer.rendertype.RenderTypes.entityTranslucentCull(atlas)
+        return translucent ? DiegesisRenderTypes.entityTranslucentCull(atlas)
                 : net.minecraft.client.renderer.rendertype.RenderTypes.entityCutout(atlas);
     }
 
@@ -134,11 +134,7 @@ public final class SceneDraw {
     /** A line of text over a background of {@code background} (ARGB; 0 for none), as a name tag has. */
     public static void text(SceneBuffers buffers, String text, float x, float y, int color, Matrix4fc matrix, Font.DisplayMode mode,
             int background, int light) {
-        Minecraft.getInstance().font.prepareText(text, x, y, color, false, background).visit(new Font.GlyphVisitor() {
-            @Override
-            public void acceptRenderable(TextRenderable renderable) {
-                renderable.render(matrix, buffers.getBuffer(renderable.renderType(mode)), light, false);
-            }
-        });
+        Minecraft.getInstance().font.prepareText(text, x, y, color, false, background)
+                .visit(Font.GlyphVisitor.forMultiBufferSource(buffers::getBuffer, matrix, mode, light));
     }
 }

@@ -5,22 +5,22 @@ import com.mojang.blaze3d.vertex.QuadInstance;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.font.TextRenderable;
 import net.minecraft.client.model.Model;
+import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.renderer.feature.ItemFeatureRenderer;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import com.mojang.blaze3d.vertex.VertexMultiConsumer;
 import net.minecraft.client.renderer.OrderedSubmitNodeCollector;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.block.MovingBlockRenderState;
 import net.minecraft.client.renderer.block.dispatch.BlockStateModelPart;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
-import net.minecraft.client.renderer.gizmos.DrawableGizmoPrimitives;
 import net.minecraft.client.renderer.item.ItemStackRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
-import net.minecraft.client.renderer.state.level.QuadParticleRenderState;
-import net.minecraft.client.renderer.texture.UvMapping;
 import net.minecraft.client.resources.model.geometry.BakedQuad;
-import net.minecraft.client.resources.model.geometry.ItemQuads;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.ARGB;
@@ -29,7 +29,6 @@ import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.joml.Matrix4f;
-import org.joml.Matrix4fc;
 import org.joml.Quaternionf;
 import org.jspecify.annotations.Nullable;
 
@@ -62,7 +61,7 @@ public final class BufferSubmits implements SubmitNodeCollector {
 
     @Override
     public void submitNameTag(PoseStack poseStack, @Nullable Vec3 nameTagAttachment, int offset, Component name, boolean seeThrough,
-            int lightCoords, CameraRenderState camera) {
+            int lightCoords, double distanceToCameraSq, CameraRenderState camera) {
     }
 
     @Override
@@ -71,28 +70,11 @@ public final class BufferSubmits implements SubmitNodeCollector {
         Font font = Minecraft.getInstance().font;
         Matrix4f pose = new Matrix4f(poseStack.last().pose());
         if (outlineColor == 0) {
-            font.prepareText(string, x, y, color, dropShadow, false, backgroundColor).visit(glyphs(pose, displayMode, lightCoords));
+            font.drawInBatch(string, x, y, color, dropShadow, pose, buffers::getBuffer, displayMode, backgroundColor, lightCoords);
         } else {
             // As the game draws outlined text (a glowing sign): the outline first, then the text over it, offset.
-            font.prepare8xTextOutline(string, x, y, outlineColor).visit(glyphs(pose, Font.DisplayMode.NORMAL, lightCoords));
-            font.prepareText(string, x, y, color, false, false, 0).visit(glyphs(pose, Font.DisplayMode.POLYGON_OFFSET, lightCoords));
+            font.drawInBatch8xOutline(string, x, y, color, outlineColor, pose, buffers::getBuffer, lightCoords);
         }
-    }
-
-    @Override
-    public void submitTextBackground(PoseStack poseStack, float x0, float y0, float x1, float y1, int color, Font.DisplayMode displayMode,
-            int lightCoords) {
-        glyphs(new Matrix4f(poseStack.last().pose()), displayMode, lightCoords)
-                .acceptRenderable(Minecraft.getInstance().font.prepareBackground(x0, y0, x1, y1, color));
-    }
-
-    private Font.GlyphVisitor glyphs(Matrix4fc pose, Font.DisplayMode displayMode, int lightCoords) {
-        return new Font.GlyphVisitor() {
-            @Override
-            public void acceptRenderable(TextRenderable renderable) {
-                renderable.render(pose, buffers.getBuffer(renderable.renderType(displayMode)), lightCoords, false);
-            }
-        };
     }
 
     @Override
@@ -105,22 +87,32 @@ public final class BufferSubmits implements SubmitNodeCollector {
 
     @Override
     public <S> void submitModel(Model<? super S> model, S state, PoseStack poseStack, RenderType renderType, int lightCoords,
-            int overlayCoords, int tintedColor, @Nullable UvMapping uvMapping, int outlineColor) {
+            int overlayCoords, int tintedColor, @Nullable TextureAtlasSprite sprite, int outlineColor,
+            ModelFeatureRenderer.@Nullable CrumblingOverlay crumblingOverlay) {
         VertexConsumer buffer = buffers.getBuffer(renderType);
-        if (uvMapping != null) {
-            buffer = uvMapping.wrap(buffer);
+        if (sprite != null) {
+            buffer = sprite.wrap(buffer);
         }
         model.setupAnim(state);
         model.renderToBuffer(poseStack, buffer, lightCoords, overlayCoords, tintedColor);
     }
 
     @Override
-    public <S> void submitCrumblingOverlay(Model<? super S> model, S state, PoseStack poseStack, RenderType renderType, int lightCoords,
-            int overlayCoords, int tintedColor, ModelFeatureRenderer.CrumblingOverlay crumblingOverlay) {
+    public void submitModelPart(ModelPart modelPart, PoseStack poseStack, RenderType renderType, int lightCoords, int overlayCoords,
+            @Nullable TextureAtlasSprite sprite, boolean sheeted, boolean hasFoil, int tintedColor,
+            ModelFeatureRenderer.@Nullable CrumblingOverlay crumblingOverlay, int outlineColor) {
+        VertexConsumer buffer = buffers.getBuffer(renderType);
+        if (hasFoil) {
+            buffer = VertexMultiConsumer.create(buffers.getBuffer(ItemFeatureRenderer.getFoilRenderType(renderType, sheeted)), buffer);
+        }
+        if (sprite != null) {
+            buffer = sprite.wrap(buffer);
+        }
+        modelPart.render(poseStack, buffer, lightCoords, overlayCoords, tintedColor);
     }
 
     @Override
-    public void submitMovingBlock(PoseStack poseStack, MovingBlockRenderState movingBlockRenderState, int outlineColor) {
+    public void submitMovingBlock(PoseStack poseStack, MovingBlockRenderState movingBlockRenderState) {
     }
 
     @Override
@@ -156,30 +148,24 @@ public final class BufferSubmits implements SubmitNodeCollector {
     }
 
     @Override
-    public void submitBreakingBlockModel(PoseStack poseStack, List<BlockStateModelPart> parts, int progress, boolean isBlockTranslucent) {
-    }
-
-    @Override
-    public void submitShapeOutline(PoseStack poseStack, VoxelShape shape, RenderType renderType, int color, float width,
-            boolean afterTerrain) {
+    public void submitBreakingBlockModel(PoseStack poseStack, BlockStateModel model, long seed, int progress) {
     }
 
     @Override
     public void submitItem(PoseStack poseStack, ItemDisplayContext displayContext, int lightCoords, int overlayCoords, int outlineColor,
-            int[] tintLayers, ItemQuads quads, ItemStackRenderState.FoilType foilType) {
+            int[] tintLayers, List<BakedQuad> quads, ItemStackRenderState.FoilType foilType) {
         // As the game's item feature draws one, glint and all; only the special glint's own decal pose is left out.
         PoseStack.Pose pose = poseStack.last();
         quad.setLightCoords(lightCoords);
         quad.setOverlayCoords(overlayCoords);
-        for (BakedQuad baked : quads.all()) {
+        for (BakedQuad baked : quads) {
             BakedQuad.MaterialInfo material = baked.materialInfo();
-            RenderType renderType = switch (foilType) {
-                case NONE -> material.itemRenderType();
-                case STANDARD -> material.itemGlintRenderType();
-                case SPECIAL -> material.itemGlintSpecialRenderType();
-            };
+            RenderType renderType = material.itemRenderType();
             int tintIndex = material.tintIndex();
-            quad.setColor(material.isTinted() && tintIndex < tintLayers.length ? tintLayers[tintIndex] : -1);
+            quad.setColor(material.isTinted() && tintIndex >= 0 && tintIndex < tintLayers.length ? tintLayers[tintIndex] : -1);
+            if (foilType != ItemStackRenderState.FoilType.NONE) {
+                buffers.getBuffer(ItemFeatureRenderer.getFoilRenderType(renderType, true)).putBakedQuad(pose, baked, quad);
+            }
             buffers.getBuffer(renderType).putBakedQuad(pose, baked, quad);
         }
     }
@@ -190,10 +176,6 @@ public final class BufferSubmits implements SubmitNodeCollector {
     }
 
     @Override
-    public void submitQuadParticleGroup(QuadParticleRenderState particles) {
-    }
-
-    @Override
-    public void submitGizmoPrimitives(DrawableGizmoPrimitives.Group group, CameraRenderState camera, boolean onTop) {
+    public void submitParticleGroup(SubmitNodeCollector.ParticleGroupRenderer particleGroupRenderer) {
     }
 }

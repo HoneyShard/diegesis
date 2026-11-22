@@ -130,13 +130,6 @@ final class RecordedBuffers implements SceneBuffers {
             return this;
         }
 
-        @Override
-        public VertexConsumer setUv3(float u, float v) {
-            data[at] |= UV3;
-            data[at + 13] = Float.floatToRawIntBits(u);
-            data[at + 14] = Float.floatToRawIntBits(v);
-            return this;
-        }
 
         void submit(OrderedSubmitNodeCollector collector, RenderType type) {
             // The vertices stand where the scene put them already: the pose the game hands back is not applied.
@@ -170,9 +163,6 @@ final class RecordedBuffers implements SceneBuffers {
                 }
                 if ((flags & LINE_WIDTH) != 0) {
                     buffer.setLineWidth(Float.intBitsToFloat(vertices[at + 12]));
-                }
-                if ((flags & UV3) != 0) {
-                    buffer.setUv3(Float.intBitsToFloat(vertices[at + 13]), Float.intBitsToFloat(vertices[at + 14]));
                 }
             }
         }

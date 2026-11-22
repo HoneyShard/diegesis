@@ -259,10 +259,6 @@ public final class PlacedShape {
             return this;
         }
 
-        @Override
-        public VertexConsumer setUv3(float u, float v) {
-            return this;
-        }
     }
 
     /**

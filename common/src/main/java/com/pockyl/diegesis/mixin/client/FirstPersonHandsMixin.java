@@ -1,7 +1,6 @@
 package com.pockyl.diegesis.mixin.client;
 
-import net.minecraft.client.player.FirstPersonHandsAndItems;
-import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.ItemInHandRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -15,7 +14,7 @@ import com.pockyl.diegesis.impl.client.focus.FocusController;
  * the held item changes: they no longer vanish in the first frame and pop back in the last. The game moves them each tick and
  * draws them between ticks, so this only holds them as low as the flight wants.
  */
-@Mixin(FirstPersonHandsAndItems.class)
+@Mixin(ItemInHandRenderer.class)
 abstract class FirstPersonHandsMixin {
     @Shadow
     private float mainHandHeight;
@@ -23,7 +22,7 @@ abstract class FirstPersonHandsMixin {
     private float offHandHeight;
 
     @Inject(method = "tick", at = @At("TAIL"))
-    private void diegesis$handsAwayAtStation(LocalPlayer player, CallbackInfo ci) {
+    private void diegesis$handsAwayAtStation(CallbackInfo ci) {
         float shown = 1.0F - FocusController.get().handAway();
         mainHandHeight = Math.min(mainHandHeight, shown);
         offHandHeight = Math.min(offHandHeight, shown);
