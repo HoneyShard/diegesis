@@ -4,6 +4,13 @@ All notable changes to this mod are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-beta.13.2+26.3] - 2026-11-22
+### Added
+- Gamepad support with [Controlify](https://modrinth.com/mod/controlify): its virtual cursor works at a station and snaps to the inventory slots and the station's parts. Contributed by rubenbarreroa ([#12](https://github.com/Pocky-l/diegesis/pull/12)).
+### Fixed
+- Closing a screen another mod opened over a station, such as a [QuestLog](https://modrinth.com/mod/questlog) quest popup, no longer leaves the player unable to move or open the menu.
+- Items whose model another mod builds with an empty part no longer fail with an error when placed in a scene.
+
 ## [1.0.0-beta.13.1+26.3] - 2026-11-21
 ### Fixed
 - Stations no longer show from far away with ZoomX or OnlyZoom+ installed: the station keeps its own field of view at any FOV setting.
