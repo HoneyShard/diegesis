@@ -45,6 +45,8 @@ public final class DiegesisClientRuntime {
 
     /** End of every client tick. */
     public static void tick() {
+        // frame() runs only while a station is worked at: a stale focus screen given back later is closed here.
+        FocusController.dropStaleScreen(Minecraft.getInstance());
         ClientStations.get().tick();
         com.pockyl.diegesis.impl.client.menu.MenuSession.get().tick();
     }

@@ -390,6 +390,10 @@ public final class FocusScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int realMouseX, int realMouseY, float partialTick) {
+        if (!FocusController.get().holdsScreen()) {
+            // A stale screen, closed in the next frame: nothing of a station left to draw.
+            return;
+        }
         SmoothPass.draw();
         int pointerX = forcedMouse != null ? (int) forcedMouse[0] : realMouseX;
         int pointerY = forcedMouse != null ? (int) forcedMouse[1] : realMouseY;
@@ -836,7 +840,12 @@ public final class FocusScreen extends Screen {
 
     @Override
     public void onClose() {
-        FocusController.get().requestExit();
+        if (FocusController.get().holdsScreen()) {
+            FocusController.get().requestExit();
+        } else {
+            // No station behind this screen any more (another mod's screen gave it back): it just closes.
+            Minecraft.getInstance().setScreen(null);
+        }
     }
 
     @Override
