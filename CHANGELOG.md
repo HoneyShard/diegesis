@@ -4,6 +4,10 @@ All notable changes to this mod are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-beta.17+1.21.1] - Unreleased
+### Fixed
+- A shallow liquid seen from low down no longer shows dark wedges over its far half, and no dark lines run down the front of a pan or along a vessel's walls.
+
 ## [1.0.0-beta.16+1.21.1] - 2026-11-22
 ### Changed
 - Stations away from the player cost far less: scenes out of view are not drawn and move in coarser steps, and far liquids are drawn in less detail.
