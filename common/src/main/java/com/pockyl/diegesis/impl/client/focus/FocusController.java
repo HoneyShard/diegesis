@@ -397,9 +397,30 @@ public final class FocusController {
         ClearBlocks.clear();
     }
 
+    /**
+     * Whether a focus screen open now belongs to a station: the camera is flying in or is there. Flying back or idle, the station
+     * has been left and any focus screen is a stale one.
+     */
+    public boolean holdsScreen() {
+        return phase == Phase.ENTERING || phase == Phase.FOCUSED;
+    }
+
+    /**
+     * Closes a focus screen that came back after its station was left. A screen another mod opens over ours (QuestLog's quest
+     * popup) remembers ours and opens it again when it closes; the station had gone by then, so that screen took the mouse and
+     * the keys, and its Escape only asked a station that was no longer there to close: the player was locked in. Checked each
+     * frame while a station is worked at and each client tick, as the screen may come back after the camera is home.
+     */
+    public static void dropStaleScreen(Minecraft minecraft) {
+        if (minecraft.screen instanceof FocusScreen && !INSTANCE.holdsScreen()) {
+            minecraft.setScreen(null);
+        }
+    }
+
     /** Advances the camera flight; once per frame, before the camera is set up. */
     public void frame() {
         HudSlide.frame();
+        dropStaleScreen(Minecraft.getInstance());
         if (phase == Phase.IDLE) {
             return;
         }
